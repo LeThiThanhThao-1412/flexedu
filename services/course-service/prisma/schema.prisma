@@ -1,0 +1,128 @@
+// services/course-service/prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// Category (Danh mục khóa học)
+model Category {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  icon        String?
+  courses     Course[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Course (Khóa học)
+model Course {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  slug        String    @unique
+  description String
+  price       Float
+  thumbnail   String?
+  level       String    @default("BEGINNER") // BEGINNER, INTERMEDIATE, ADVANCED
+  status      String    @default("DRAFT") // DRAFT, PUBLISHED, ARCHIVED
+  instructorId String   @db.ObjectId
+  categoryId  String?   @db.ObjectId
+  category    Category? @relation(fields: [categoryId], references: [id])
+  modules     Module[]
+  enrollments Enrollment[]
+  reviews     Review[]
+  rating      Float     @default(0)
+  totalStudents Int     @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([instructorId])
+  @@index([status])
+
+}
+
+// Module (Chương)
+model Module {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String?
+  order       Int
+  courseId    String   @db.ObjectId
+  course      Course   @relation(fields: [courseId], references: [id])
+  lessons     Lesson[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([courseId, order])
+}
+
+// Lesson (Bài học)
+model Lesson {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String?
+  type        String   @default("VIDEO") // VIDEO, TEXT, QUIZ
+  content     String?  // URL video hoặc nội dung text
+  duration    Int?     // Thời lượng (phút)
+  order       Int
+  moduleId    String   @db.ObjectId
+  module      Module   @relation(fields: [moduleId], references: [id])
+  isFree      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([moduleId, order])
+}
+
+// Enrollment (Ghi danh)
+model Enrollment {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  courseId    String   @db.ObjectId
+  course      Course   @relation(fields: [courseId], references: [id])
+  progress    Float    @default(0) // 0-100
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+}
+
+// Lesson Progress (Tiến độ bài học)
+model LessonProgress {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  lessonId    String   @db.ObjectId
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+  @@index([lessonId])
+}
+
+// Review (Đánh giá)
+model Review {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  courseId    String   @db.ObjectId
+  course      Course   @relation(fields: [courseId], references: [id])
+  rating      Int      
+  comment     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+  @@index([rating])
+}

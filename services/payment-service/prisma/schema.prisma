@@ -1,0 +1,38 @@
+// services/payment-service/prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Order {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String   @db.ObjectId
+  courseId     String   @db.ObjectId
+  amount       Float
+  currency     String   @default("USD")
+  status       String   @default("PENDING") // PENDING, SUCCESS, FAILED, REFUNDED
+  paymentId    String?  // Stripe payment intent ID
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  transactions  Transaction[]
+
+  @@index([userId])
+  @@index([courseId])
+  @@index([status])
+}
+
+model Transaction {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  orderId      String   @db.ObjectId
+  order        Order    @relation(fields: [orderId], references: [id])
+  paymentIntent String  @unique
+  amount       Float
+  status       String
+  metadata     Json?
+  createdAt    DateTime @default(now())
+}

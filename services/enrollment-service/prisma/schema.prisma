@@ -1,0 +1,68 @@
+// services/enrollment-service/prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// Enrollment (Ghi danh)
+model Enrollment {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String    @db.ObjectId
+  courseId    String    @db.ObjectId @map("courseId")
+  
+  // THÊM DÒNG NÀY: Định nghĩa quan hệ
+  course      Course    @relation(fields: [courseId], references: [id])
+
+  progress    Float     @default(0)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+}
+
+// Lesson Progress (Tiến độ bài học)
+model LessonProgress {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  lessonId    String   @db.ObjectId
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+  @@index([lessonId])
+}
+
+// Course Progress Summary (Cache cho hiệu suất C10K)
+model CourseProgress {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  courseId    String   @db.ObjectId
+  totalLessons Int     @default(0)
+  completedLessons Int @default(0)
+  progressPercent Float @default(0)
+  lastAccessed DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+  @@index([progressPercent])
+}
+model Course {
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  title        String
+  thumbnail    String?
+  instructorId String       @db.ObjectId
+  enrollments  Enrollment[] // Quan hệ ngược lại
+}

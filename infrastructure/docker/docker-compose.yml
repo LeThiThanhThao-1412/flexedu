@@ -1,0 +1,179 @@
+# infrastructure/docker/docker-compose.yml
+version: '3.8'
+
+services:
+  # MongoDB
+  mongodb:
+    image: mongo:6
+    container_name: flexedu-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    # Thêm command để kích hoạt Replica Set
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    networks:
+      - flexedu-network
+
+  # Service bổ trợ để tự động init Replica Set
+  mongodb-setup:
+    image: mongo:6
+    depends_on:
+      - mongodb
+    networks:
+      - flexedu-network
+    # Logic mới: Chỉ initiate nếu chưa có rs, tránh lỗi khi khởi động lại
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for MongoDB...' &&
+        sleep 10 &&
+        mongosh --host mongodb:27017 --eval '
+          try {
+            rs.initiate();
+            console.log(\"✅ Replica Set initialized\");
+          } catch (e) {
+            if (e.message.includes(\"already initialized\")) {
+              console.log(\"ℹ️ Replica Set already initialized\");
+            } else {
+              throw e;
+            }
+          }
+        '
+      "
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: flexedu-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - flexedu-network
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ../../services/auth-service
+      dockerfile: Dockerfile
+    container_name: flexedu-auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      # Thêm tham số replicaSet=rs0
+      - DATABASE_URL=mongodb://mongodb:27017/flexedu_auth?replicaSet=rs0&directConnection=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=my-super-secret-key-change-in-production
+      - JWT_REFRESH_SECRET=my-refresh-secret-key-change-in-production
+    volumes:
+      - ../../services/auth-service:/app
+      - /app/node_modules
+    depends_on:
+      mongodb:
+        condition: service_started
+      redis:
+        condition: service_started
+      mongodb-setup:
+        condition: service_completed_successfully
+    networks:
+      - flexedu-network
+    command: >
+      sh -c "sleep 5 && 
+             npx prisma db push && 
+             npx prisma db seed && 
+             npm start"
+  course-service:
+    build:
+      context: ../../services/course-service
+      dockerfile: Dockerfile
+    container_name: flexedu-course-service
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=development
+      - PORT=3003
+      # THÊM replicaSet=rs0 và directConnection=false
+      - DATABASE_URL=mongodb://mongodb:27017/flexedu_courses?replicaSet=rs0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ../../services/course-service:/app
+      - /app/node_modules
+    depends_on:
+      mongodb-setup:
+        condition: service_completed_successfully
+    networks:
+      - flexedu-network
+    # THÊM lệnh khởi động giống auth-service
+    command: >
+      sh -c "sleep 5 && npx prisma db push && npm start"
+  enrollment-service:
+    build: ../../services/enrollment-service
+    container_name: flexedu-enrollment-service
+    ports:
+      - "3004:3004"
+    environment:
+      # THÊM replicaSet=rs0
+      - DATABASE_URL=mongodb://mongodb:27017/flexedu_enrollments?replicaSet=rs0
+      - REDIS_HOST=redis
+    volumes:
+      - ../../services/enrollment-service:/app
+      - /app/node_modules
+    depends_on:
+      - mongodb
+      - redis
+    
+    networks:
+      - flexedu-network
+    command: >
+      sh -c "sleep 5 && npx prisma db push && npm start"
+
+  payment-service:
+    build: ../../services/payment-service
+    container_name: flexedu-payment-service
+    ports:
+      - "3005:3005"
+    environment:
+      # THÊM replicaSet=rs0
+      - DATABASE_URL=mongodb://mongodb:27017/flexedu_payments?replicaSet=rs0
+      - REDIS_HOST=redis
+      - ENROLLMENT_SERVICE_URL=http://enrollment-service:3004
+    volumes:
+      - ../../services/payment-service:/app
+      - /app/node_modules
+    depends_on:
+      - mongodb
+      - redis
+      - enrollment-service
+    networks:
+      - flexedu-network
+    command: >
+      sh -c "sleep 5 && npx prisma db push && npm start"
+  api-gateway:
+    build: ../../api-gateway
+    container_name: flexedu-api-gateway
+    ports:
+      - "3000:3000"
+    env_file:
+      - ../../api-gateway/.env
+    volumes:
+      - ../../api-gateway:/app
+      - /app/node_modules
+    depends_on:
+      - auth-service
+      - course-service
+      - enrollment-service
+      - payment-service
+      - redis
+    networks:
+      - flexedu-network
+
+
+networks:
+  flexedu-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
