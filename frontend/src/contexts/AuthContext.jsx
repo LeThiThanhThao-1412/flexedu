@@ -18,14 +18,28 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const login = async (email, password) => {
-    const response = await authService.login(email, password);
-    if (response.success) {
-      setUser(response.data.user);
-    }
-    return response;
-  };
+  // frontend/src/contexts/AuthContext.jsx
 
+const login = async (email, password) => {
+  try {
+    const result = await authService.login(email, password);
+    
+    // Sử dụng ?. để tránh lỗi "undefined"
+    if (result?.accessToken || result?.success) {
+      // Lấy dữ liệu user từ kết quả trả về
+      const userData = result.user || result.data?.user;
+      setUser(userData); 
+      
+      // XÓA DÒNG setIsAuthenticated(true) vì bạn không khai báo state này
+      
+      return { success: true, user: userData };
+    }
+    return { success: false, message: result?.message || 'Thông tin không chính xác' };
+  } catch (error) {
+    console.error("Login error:", error);
+    return { success: false, message: 'Server không phản hồi' };
+  }
+};
   const register = async (data) => {
     const response = await authService.register(data);
     if (response.success && response.data?.accessToken) {

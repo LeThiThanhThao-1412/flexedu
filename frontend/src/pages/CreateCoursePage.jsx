@@ -12,8 +12,6 @@ import {
   ArrowLeftIcon,
   PlusIcon,
   TrashIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
   VideoCameraIcon,
   DocumentTextIcon,
   PuzzlePieceIcon
@@ -23,7 +21,7 @@ export default function CreateCoursePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('basic'); // basic, modules, publish
+  const [activeTab, setActiveTab] = useState('basic');
   
   // Course form data
   const [courseData, setCourseData] = useState({
@@ -51,7 +49,7 @@ export default function CreateCoursePage() {
           content: '',
           duration: 0,
           order: 0,
-          isFree: false,
+          isFree: true, // Bài giới thiệu nên để miễn phí
         }
       ]
     }
@@ -134,31 +132,116 @@ export default function CreateCoursePage() {
   };
 
   const handleSubmit = async () => {
-    // Validate basic info
+    // ========== VALIDATION THEO BACKEND ==========
+    
+    // 1. Validate title (min 5 chars)
     if (!courseData.title.trim()) {
       toast.error('Vui lòng nhập tên khóa học');
       return;
     }
+    if (courseData.title.trim().length < 5) {
+      toast.error('Tên khóa học phải có ít nhất 5 ký tự');
+      return;
+    }
+    if (courseData.title.trim().length > 200) {
+      toast.error('Tên khóa học không được vượt quá 200 ký tự');
+      return;
+    }
+    
+    // 2. Validate description (min 20 chars)
     if (!courseData.description.trim()) {
       toast.error('Vui lòng nhập mô tả khóa học');
       return;
     }
+    if (courseData.description.trim().length < 20) {
+      toast.error('Mô tả khóa học phải có ít nhất 20 ký tự');
+      return;
+    }
+    if (courseData.description.trim().length > 5000) {
+      toast.error('Mô tả khóa học không được vượt quá 5000 ký tự');
+      return;
+    }
+    
+    // 3. Validate price
     if (courseData.price < 0) {
       toast.error('Giá khóa học không hợp lệ');
       return;
     }
+    if (courseData.price > 9999) {
+      toast.error('Giá khóa học không được vượt quá 9999 USD');
+      return;
+    }
+    
+    // 4. Validate level
+    const validLevels = ['BEGINNER', 'INTERMEDIATE', 'ADVANCED'];
+    if (!validLevels.includes(courseData.level)) {
+      toast.error('Trình độ khóa học không hợp lệ');
+      return;
+    }
+    
+    // 5. Validate thumbnail (nếu có)
+    if (courseData.thumbnail && !courseData.thumbnail.startsWith('http')) {
+      toast.error('URL thumbnail không hợp lệ (phải bắt đầu bằng http:// hoặc https://)');
+      return;
+    }
+    
+    // 6. Validate modules và lessons
+    for (const module of modules) {
+      if (!module.title.trim()) {
+        toast.error('Vui lòng nhập tên chương');
+        return;
+      }
+      if (module.title.length < 3) {
+        toast.error(`Tên chương "${module.title}" phải có ít nhất 3 ký tự`);
+        return;
+      }
+      
+      for (const lesson of module.lessons) {
+        if (!lesson.title.trim()) {
+          toast.error('Vui lòng nhập tên bài học');
+          return;
+        }
+        if (lesson.title.length < 3) {
+          toast.error(`Tên bài học "${lesson.title}" phải có ít nhất 3 ký tự`);
+          return;
+        }
+        if (!lesson.content.trim()) {
+          toast.error(`Bài học "${lesson.title}" chưa có nội dung (URL video hoặc text)`);
+          return;
+        }
+      }
+    }
+
+    // Log dữ liệu gửi đi
+    console.log('📤 Sending course data:', {
+      title: courseData.title,
+      description: courseData.description,
+      price: courseData.price,
+      level: courseData.level,
+      thumbnail: courseData.thumbnail || undefined,
+      modulesCount: modules.length,
+      lessonsCount: modules.reduce((sum, m) => sum + m.lessons.length, 0)
+    });
 
     setLoading(true);
     try {
       // 1. Tạo khóa học
-      const response = await courseService.createCourse(courseData);
+      const response = await courseService.createCourse({
+        title: courseData.title,
+        description: courseData.description,
+        price: courseData.price,
+        level: courseData.level,
+        thumbnail: courseData.thumbnail || undefined,
+      });
+      
+      console.log('✅ Course created:', response.data);
       const courseId = response.data.id;
 
       // 2. Tạo modules và lessons
       for (const module of modules) {
         const moduleData = {
           title: module.title,
-          description: module.description,
+          description: module.description || '',
           order: module.order,
         };
         
@@ -169,21 +252,24 @@ export default function CreateCoursePage() {
         for (const lesson of module.lessons) {
           await courseService.addLesson(moduleId, {
             title: lesson.title,
-            description: lesson.description,
+            description: lesson.description || '',
             type: lesson.type,
             content: lesson.content,
-            duration: lesson.duration,
+            duration: lesson.duration || 0,
             order: lesson.order,
             isFree: lesson.isFree,
           });
         }
       }
 
-      toast.success('Tạo khóa học thành công!');
+      toast.success('🎉 Tạo khóa học thành công!');
       navigate('/instructor/courses');
     } catch (error) {
-      console.error('Create course error:', error);
-      toast.error('Tạo khóa học thất bại');
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
+      
+      const errorMessage = error.response?.data?.message || 'Tạo khóa học thất bại';
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -259,10 +345,10 @@ export default function CreateCoursePage() {
                   name="title"
                   value={courseData.title}
                   onChange={handleCourseChange}
-                  placeholder="VD: Lập trình React từ cơ bản đến nâng cao"
+                  placeholder="VD: Lập trình Microservices với Node.js (tối thiểu 5 ký tự)"
                   className="input-glass w-full"
                 />
-                <p className="text-gray-500 text-sm mt-1">Hãy đặt tên hấp dẫn và mô tả đúng nội dung</p>
+                <p className="text-gray-500 text-sm mt-1">Tên khóa học phải có ít nhất 5 ký tự, tối đa 200 ký tự</p>
               </div>
 
               <div>
@@ -274,9 +360,10 @@ export default function CreateCoursePage() {
                   value={courseData.description}
                   onChange={handleCourseChange}
                   rows={5}
-                  placeholder="Mô tả chi tiết về khóa học, học viên sẽ học được gì..."
+                  placeholder="Mô tả chi tiết về khóa học (tối thiểu 20 ký tự). Ví dụ: Khóa học này sẽ giúp bạn nắm vững kiến thức về microservices, Docker, Kubernetes và thực hành xây dựng dự án thực tế từ A-Z..."
                   className="input-glass w-full resize-none"
                 />
+                <p className="text-gray-500 text-sm mt-1">Mô tả phải có ít nhất 20 ký tự, tối đa 5000 ký tự</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -290,10 +377,11 @@ export default function CreateCoursePage() {
                     value={courseData.price}
                     onChange={handleCourseChange}
                     min="0"
+                    max="9999"
                     step="0.01"
                     className="input-glass w-full"
                   />
-                  <p className="text-gray-500 text-sm mt-1">Để 0 nếu muốn miễn phí</p>
+                  <p className="text-gray-500 text-sm mt-1">Để 0 nếu muốn miễn phí, tối đa 9999 USD</p>
                 </div>
 
                 <div>
@@ -322,9 +410,10 @@ export default function CreateCoursePage() {
                   name="thumbnail"
                   value={courseData.thumbnail}
                   onChange={handleCourseChange}
-                  placeholder="https://example.com/image.jpg"
+                  placeholder="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600"
                   className="input-glass w-full"
                 />
+                <p className="text-gray-500 text-sm mt-1">URL ảnh bìa khóa học (phải bắt đầu bằng http:// hoặc https://)</p>
                 {courseData.thumbnail && (
                   <div className="mt-3">
                     <img src={courseData.thumbnail} alt="Preview" className="w-48 h-32 object-cover rounded-lg" />
@@ -357,7 +446,7 @@ export default function CreateCoursePage() {
                       value={module.title}
                       onChange={(e) => updateModule(module.id, 'title', e.target.value)}
                       className="text-xl font-bold text-white bg-transparent border-b border-white/20 focus:border-blue-500 outline-none w-full mb-2"
-                      placeholder="Tên chương"
+                      placeholder="Tên chương (tối thiểu 3 ký tự)"
                     />
                     <textarea
                       value={module.description}
@@ -386,7 +475,7 @@ export default function CreateCoursePage() {
                             value={lesson.title}
                             onChange={(e) => updateLesson(module.id, lesson.id, 'title', e.target.value)}
                             className="text-white font-medium bg-transparent border-b border-white/20 focus:border-blue-500 outline-none w-full"
-                            placeholder="Tên bài học"
+                            placeholder="Tên bài học (tối thiểu 3 ký tự)"
                           />
                         </div>
                         <button
@@ -412,7 +501,7 @@ export default function CreateCoursePage() {
                           type="text"
                           value={lesson.content}
                           onChange={(e) => updateLesson(module.id, lesson.id, 'content', e.target.value)}
-                          placeholder={lesson.type === 'VIDEO' ? 'URL video' : 'Nội dung bài học'}
+                          placeholder={lesson.type === 'VIDEO' ? 'URL video (bắt buộc)' : 'Nội dung bài học (bắt buộc)'}
                           className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-500"
                         />
 
@@ -438,7 +527,7 @@ export default function CreateCoursePage() {
                       <textarea
                         value={lesson.description}
                         onChange={(e) => updateLesson(module.id, lesson.id, 'description', e.target.value)}
-                        placeholder="Mô tả bài học"
+                        placeholder="Mô tả bài học (tùy chọn)"
                         rows={2}
                         className="w-full text-gray-400 bg-transparent border border-white/10 rounded-lg p-2 text-sm focus:border-blue-500 outline-none"
                       />

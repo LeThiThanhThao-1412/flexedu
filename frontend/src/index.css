@@ -1,19 +1,51 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* IMPORT PHẢI Ở ĐẦU TIÊN */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
+/* Tailwind directives - CHỈ KHAI BÁO 1 LẦN */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Custom base styles */
 @layer base {
   body {
     @apply bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 min-h-screen;
     font-family: 'Inter', sans-serif;
   }
 }
-/* frontend/src/index.css - thêm vào cuối */
+
+/* Custom components */
+@layer components {
+  .glass-card {
+    @apply bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl;
+  }
+  
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10;
+  }
+  
+  .input-glass {
+    @apply bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-white 
+           placeholder:text-gray-500 focus:outline-none focus:border-blue-500 
+           focus:ring-1 focus:ring-blue-500 transition-all;
+  }
+  
+  .btn-primary {
+    @apply px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white 
+           font-semibold rounded-xl hover:from-blue-700 hover:to-purple-700 
+           transform hover:scale-105 transition-all duration-300 
+           shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 
+           focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900;
+  }
+  
+  .btn-secondary {
+    @apply px-6 py-3 bg-white/10 backdrop-blur border border-white/20 text-white 
+           font-semibold rounded-xl hover:bg-white/20 transform hover:scale-105 
+           transition-all duration-300;
+  }
+}
+
+/* Custom utilities */
 @layer utilities {
   .line-clamp-2 {
     display: -webkit-box;
@@ -21,8 +53,22 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-
+  
+  .animate-slide-down {
+    animation: slide-down 0.2s ease-out;
+  }
+  
+  .card-hover {
+    transition: all 0.3s ease;
+  }
+  
+  .card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.3);
+  }
 }
+
+/* Keyframes animations */
 @keyframes slide-down {
   from {
     opacity: 0;
@@ -34,17 +80,17 @@
   }
 }
 
-.animate-slide-down {
-  animation: slide-down 0.2s ease-out;
-}
-/* frontend/src/index.css - thêm vào cuối file */
-.card-hover {
-  transition: all 0.3s ease;
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
 }
 
-.card-hover:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.3);
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
 }
 
 /* Smooth transition cho tất cả elements */
@@ -52,4 +98,23 @@
   transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }

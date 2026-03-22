@@ -9,16 +9,36 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
-
-// Request interceptor - thêm user headers (KHÔNG CẦN TOKEN)
+// frontend/src/services/api.js
 api.interceptors.request.use(
   (config) => {
-    // Lấy user từ localStorage
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      if (user && user.id) {
+        config.headers['x-user-id'] = user.id;
+        console.log("🚀 Axios đang gửi ID:", user.id); // Thêm dòng này để debug
+      }
+    } else {
+      console.warn("⚠️ Không tìm thấy user trong localStorage!");
+    }
+    return config;
+  }
+);
+// Request interceptor - thêm token và user headers
+api.interceptors.request.use(
+  (config) => {
+    // Lấy token
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    // Lấy user info
     const userStr = localStorage.getItem('user');
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
-        // THÊM x-user-id và x-user-role vào header
         if (user.id) {
           config.headers['x-user-id'] = user.id;
         }
@@ -30,11 +50,15 @@ api.interceptors.request.use(
       }
     }
     
-    // Nếu có token thì vẫn thêm (cho các service cần)
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    console.log('📤 Request:', {
+      url: config.url,
+      method: config.method,
+      headers: {
+        Authorization: config.headers.Authorization ? 'Bearer ***' : null,
+        'x-user-id': config.headers['x-user-id'],
+        'x-user-role': config.headers['x-user-role'],
+      }
+    });
     
     return config;
   },

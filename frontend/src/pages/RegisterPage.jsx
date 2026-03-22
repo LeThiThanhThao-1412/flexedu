@@ -137,9 +137,9 @@ export default function RegisterPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormData({...formData, role: 'TEACHER'})}
+                  onClick={() => setFormData({...formData, role: 'INSTRUCTOR'})}
                   className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${
-                    formData.role === 'TEACHER' 
+                    formData.role === 'INSTRUCTOR' 
                     ? 'bg-purple-600/20 border-purple-500 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.3)]' 
                     : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/30'
                   }`}

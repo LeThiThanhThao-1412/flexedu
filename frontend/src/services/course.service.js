@@ -67,10 +67,37 @@ export const courseService = {
     const response = await api.get(`/api/enrollments/${courseId}/progress`);
     return response.data;
   },
-  
+  // Lấy danh sách giảng viên chờ duyệt (admin)
+getPendingInstructors: async () => {
+  const response = await api.get('/api/auth/pending-instructors');
+  return response.data;
+},
+
   // Lấy khóa học của giảng viên
   getInstructorCourses: async () => {
     const response = await api.get('/api/courses?status=ALL');
+    return response.data;
+  },
+  createCourse: async (data) => {
+  console.log('📤 Sending to backend:', data);
+  const response = await api.post('/api/courses', data);
+  console.log('📥 Backend response:', response.data);
+  return response.data;
+},
+
+
+approveInstructor: async (instructorId) => {
+  const response = await api.patch(`/api/auth/approve/${instructorId}`);
+  return response.data;
+},
+getMyCourses: async (params = {}) => {
+    const response = await api.get('/api/courses/my-courses', { params });
+    return response.data;
+  },
+  
+  // Hoặc sửa lại getInstructorCourses để gọi API đúng
+  getInstructorCourses: async () => {
+    const response = await api.get('/api/courses/my-courses?status=ALL');
     return response.data;
   },
 };

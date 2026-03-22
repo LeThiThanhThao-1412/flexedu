@@ -42,7 +42,7 @@ class CourseController {
           title,
           slug,
           description,
-          price,
+          price: parseFloat(price),
           level,
           instructorId,
           categoryId,
@@ -548,6 +548,66 @@ async publishCourse(req, res) {
   } catch (error) {
     console.error('Publish course error:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+}
+// services/course-service/src/controllers/course.controller.js
+// Thêm method mới để lấy khóa học của riêng giảng viên
+
+// Lấy danh sách khóa học của giảng viên đang đăng nhập
+async getMyCourses(req, res) {
+  try {
+    // Lấy instructorId từ header (do API Gateway gửi)
+    const instructorId = req.headers['x-user-id'];
+    
+    if (!instructorId) {
+      return res.status(400).json({ // Đổi thành 400 vì lỗi thiếu dữ liệu đầu vào
+        success: false,
+        message: 'Missing instructorId in headers'
+      });
+    }
+    
+    const { page = 1, limit = 10, status } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Xây dựng filter
+    const where = { instructorId };
+    if (status && status !== 'ALL') {
+      where.status = status;
+    }
+    
+    const courses = await prisma.course.findMany({
+      where,
+      skip,
+      take: parseInt(limit),
+      orderBy: { createdAt: 'desc' },
+      include: {
+        category: true,
+        _count: {
+          select: { enrollments: true, reviews: true }
+        }
+      }
+    });
+    
+    const total = await prisma.course.count({ where });
+    
+    res.json({
+      success: true,
+      data: {
+        courses,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          totalPages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get my courses error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
   }
 }
 }

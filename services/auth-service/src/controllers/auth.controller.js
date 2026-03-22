@@ -283,6 +283,50 @@ class AuthController {
       res.status(500).json({ success: false, message: error.message });
     }
   }
+  // services/auth-service/src/controllers/auth.controller.js
+// Thêm method này vào class AuthController
+
+// Lấy danh sách giảng viên chờ duyệt (isActive = false)
+async getPendingInstructors(req, res) {
+  try {
+    // Chỉ admin mới được xem
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin only.'
+      });
+    }
+
+    const pendingInstructors = await prisma.user.findMany({
+      where: {
+        role: 'INSTRUCTOR',
+        isActive: false
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    res.json({
+      success: true,
+      data: pendingInstructors
+    });
+  } catch (error) {
+    console.error('Get pending instructors error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+}
 }
 
 module.exports = new AuthController();

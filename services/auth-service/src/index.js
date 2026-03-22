@@ -39,7 +39,10 @@ app.patch('/api/auth/approve/:instructorId',
   isAdmin, 
   authController.approveInstructor
 );
-
+app.get('/api/auth/pending-instructors', 
+  isAdmin,  // Middleware kiểm tra admin
+  authController.getPendingInstructors
+);
 // Start server
 app.listen(PORT, () => {
   console.log(`✅ Auth Service running on port ${PORT}`);

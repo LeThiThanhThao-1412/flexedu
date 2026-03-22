@@ -12,19 +12,19 @@ import {
   ChartBarIcon,
   CheckCircleIcon,
   XCircleIcon,
-  ClockIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 
 export default function AdminDashboard() {
   const [pendingInstructors, setPendingInstructors] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalCourses: 0,
     totalRevenue: 0,
     activeStudents: 0,
   });
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
@@ -32,13 +32,14 @@ export default function AdminDashboard() {
   }, []);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
-      // Fetch pending instructors
-      const instructorsResponse = await courseService.getPendingInstructors();
-      setPendingInstructors(instructorsResponse.data || []);
+      // Lấy danh sách giảng viên chờ duyệt
+      const response = await courseService.getPendingInstructors();
+      console.log('Pending instructors:', response.data);
+      setPendingInstructors(response.data || []);
       
-      // Fetch stats (will implement with real APIs later)
-      // For now, using mock data
+      // Mock stats (có thể thay bằng API thật sau)
       setStats({
         totalUsers: 1250,
         totalCourses: 48,
@@ -47,19 +48,27 @@ export default function AdminDashboard() {
       });
     } catch (error) {
       console.error('Failed to fetch data:', error);
+      toast.error('Không thể tải dữ liệu');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleApproveInstructor = async (instructorId) => {
+  const handleApprove = async (instructorId) => {
     try {
       await courseService.approveInstructor(instructorId);
       toast.success('Đã duyệt giảng viên thành công');
+      // Cập nhật lại danh sách
       setPendingInstructors(pendingInstructors.filter(i => i.id !== instructorId));
     } catch (error) {
+      console.error('Approve error:', error);
       toast.error('Duyệt giảng viên thất bại');
     }
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('vi-VN');
   };
 
   const statCards = [
@@ -90,22 +99,51 @@ export default function AdminDashboard() {
 
         {/* Tabs */}
         <div className="flex space-x-2 mb-8 border-b border-white/10">
-          {['overview', 'instructors', 'courses', 'users'].map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-6 py-3 text-sm font-medium transition-all ${
-                activeTab === tab
-                  ? 'text-blue-400 border-b-2 border-blue-400'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              {tab === 'overview' && 'Tổng quan'}
-              {tab === 'instructors' && 'Duyệt giảng viên'}
-              {tab === 'courses' && 'Quản lý khóa học'}
-              {tab === 'users' && 'Quản lý người dùng'}
-            </button>
-          ))}
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`px-6 py-3 text-sm font-medium transition-all ${
+              activeTab === 'overview'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Tổng quan
+          </button>
+          <button
+            onClick={() => setActiveTab('instructors')}
+            className={`px-6 py-3 text-sm font-medium transition-all ${
+              activeTab === 'instructors'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Duyệt giảng viên
+            {pendingInstructors.length > 0 && (
+              <span className="ml-2 px-2 py-0.5 text-xs bg-red-500 text-white rounded-full">
+                {pendingInstructors.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('courses')}
+            className={`px-6 py-3 text-sm font-medium transition-all ${
+              activeTab === 'courses'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Quản lý khóa học
+          </button>
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`px-6 py-3 text-sm font-medium transition-all ${
+              activeTab === 'users'
+                ? 'text-blue-400 border-b-2 border-blue-400'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Quản lý người dùng
+          </button>
         </div>
 
         {/* Overview Tab */}
@@ -133,30 +171,48 @@ export default function AdminDashboard() {
               })}
             </div>
 
-            {/* Recent Activity */}
-            <GlassCard className="p-6">
-              <h2 className="text-xl font-bold text-white mb-4">Hoạt động gần đây</h2>
-              <div className="space-y-3">
-                {[1, 2, 3, 4, 5].map((_, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+            {/* Pending Instructors Summary */}
+            {pendingInstructors.length > 0 && (
+              <GlassCard className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-white">Giảng viên chờ duyệt</h2>
+                  <button
+                    onClick={() => setActiveTab('instructors')}
+                    className="text-blue-400 hover:text-blue-300 text-sm"
+                  >
+                    Xem tất cả →
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {pendingInstructors.slice(0, 3).map((instructor) => (
+                    <div key={instructor.id} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
                       <div>
-                        <p className="text-white text-sm">Nguyễn Văn A đã đăng ký khóa học "React Masterclass"</p>
-                        <p className="text-gray-500 text-xs">{i + 1} giờ trước</p>
+                        <p className="text-white font-medium">{instructor.name}</p>
+                        <p className="text-gray-400 text-sm">{instructor.email}</p>
                       </div>
+                      <button
+                        onClick={() => handleApprove(instructor.id)}
+                        className="px-3 py-1 bg-green-600/20 text-green-400 rounded-lg hover:bg-green-600/30 transition text-sm"
+                      >
+                        Duyệt
+                      </button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </GlassCard>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
           </>
         )}
 
         {/* Instructors Tab - Pending Approval */}
         {activeTab === 'instructors' && (
           <GlassCard className="p-6">
-            <h2 className="text-xl font-bold text-white mb-4">Giảng viên chờ duyệt</h2>
+            <h2 className="text-xl font-bold text-white mb-4">
+              Giảng viên chờ duyệt
+              {pendingInstructors.length > 0 && (
+                <span className="ml-2 text-sm text-gray-400">({pendingInstructors.length})</span>
+              )}
+            </h2>
             
             {pendingInstructors.length === 0 ? (
               <div className="text-center py-12">
@@ -166,32 +222,29 @@ export default function AdminDashboard() {
             ) : (
               <div className="space-y-4">
                 {pendingInstructors.map((instructor) => (
-                  <div key={instructor.id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+                  <div key={instructor.id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl hover:bg-white/10 transition">
                     <div className="flex items-center space-x-4">
                       <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
                         <span className="text-white font-bold text-lg">
-                          {instructor.name?.charAt(0).toUpperCase()}
+                          {instructor.name?.charAt(0).toUpperCase() || 'G'}
                         </span>
                       </div>
                       <div>
                         <h3 className="text-white font-semibold">{instructor.name}</h3>
                         <p className="text-gray-400 text-sm">{instructor.email}</p>
-                        <p className="text-gray-500 text-xs mt-1">
-                          Đăng ký: {new Date(instructor.createdAt).toLocaleDateString()}
-                        </p>
+                        <div className="flex items-center mt-1 text-xs text-gray-500">
+                          <ClockIcon className="w-3 h-3 mr-1" />
+                          Đăng ký: {formatDate(instructor.createdAt)}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => handleApproveInstructor(instructor.id)}
+                        onClick={() => handleApprove(instructor.id)}
                         className="px-4 py-2 bg-green-600/20 text-green-400 rounded-lg hover:bg-green-600/30 transition flex items-center"
                       >
                         <CheckCircleIcon className="w-4 h-4 mr-1" />
                         Duyệt
-                      </button>
-                      <button className="px-4 py-2 bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600/30 transition flex items-center">
-                        <XCircleIcon className="w-4 h-4 mr-1" />
-                        Từ chối
                       </button>
                     </div>
                   </div>
@@ -201,56 +254,19 @@ export default function AdminDashboard() {
           </GlassCard>
         )}
 
-        {/* Courses Tab */}
+        {/* Courses Tab - Placeholder */}
         {activeTab === 'courses' && (
           <GlassCard className="p-6">
             <h2 className="text-xl font-bold text-white mb-4">Quản lý khóa học</h2>
-            <div className="space-y-3">
-              {[1, 2, 3, 4].map((_, i) => (
-                <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
-                  <div>
-                    <p className="text-white">Khóa học {i + 1}</p>
-                    <p className="text-gray-500 text-sm">Giảng viên: Nguyễn Văn A</p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="px-2 py-1 text-xs rounded-full bg-green-500/20 text-green-400">
-                      Đã xuất bản
-                    </span>
-                    <button className="text-blue-400 hover:text-blue-300">Chi tiết</button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <p className="text-gray-400 text-center py-8">Tính năng đang phát triển</p>
           </GlassCard>
         )}
 
-        {/* Users Tab */}
+        {/* Users Tab - Placeholder */}
         {activeTab === 'users' && (
           <GlassCard className="p-6">
             <h2 className="text-xl font-bold text-white mb-4">Quản lý người dùng</h2>
-            <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map((_, i) => (
-                <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-r from-gray-500 to-gray-600 flex items-center justify-center">
-                      <span className="text-white">U</span>
-                    </div>
-                    <div>
-                      <p className="text-white">User {i + 1}</p>
-                      <p className="text-gray-500 text-sm">user{i + 1}@example.com</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      i % 2 === 0 ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'
-                    }`}>
-                      {i % 2 === 0 ? 'Học viên' : 'Giảng viên'}
-                    </span>
-                    <button className="text-red-400 hover:text-red-300">Khóa</button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <p className="text-gray-400 text-center py-8">Tính năng đang phát triển</p>
           </GlassCard>
         )}
       </div>

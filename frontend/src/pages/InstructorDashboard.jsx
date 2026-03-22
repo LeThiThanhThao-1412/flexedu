@@ -33,29 +33,36 @@ export default function InstructorDashboard() {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const response = await courseService.getInstructorCourses();
-      const coursesData = response.data.courses || [];
-      setCourses(coursesData);
+  // frontend/src/pages/InstructorDashboard.jsx
+// Sửa fetchData
 
-      // Calculate stats
-      const totalStudents = coursesData.reduce((sum, c) => sum + (c._count?.enrollments || 0), 0);
-      const totalRevenue = coursesData.reduce((sum, c) => sum + (c.price * (c._count?.enrollments || 0)), 0);
-      
-      setStats({
-        totalCourses: coursesData.length,
-        totalStudents,
-        totalRevenue,
-        completionRate: 0, // Will implement later
-      });
-    } catch (error) {
-      console.error('Failed to fetch courses:', error);
-      toast.error('Không thể tải dữ liệu');
-    } finally {
-      setLoading(false);
-    }
-  };
+const fetchData = async () => {
+  setLoading(true);
+  try {
+    // Gọi API lấy khóa học của riêng giảng viên
+    const response = await courseService.getMyCourses({ status: 'ALL' });
+    console.log('My courses response:', response);
+    
+    const coursesData = response.data.courses || [];
+    setCourses(coursesData);
+
+    // Calculate stats từ khóa học của riêng giảng viên
+    const totalStudents = coursesData.reduce((sum, c) => sum + (c._count?.enrollments || 0), 0);
+    const totalRevenue = coursesData.reduce((sum, c) => sum + (c.price * (c._count?.enrollments || 0)), 0);
+    
+    setStats({
+      totalCourses: coursesData.length,
+      totalStudents,
+      totalRevenue,
+      completionRate: 0,
+    });
+  } catch (error) {
+    console.error('Failed to fetch courses:', error);
+    toast.error('Không thể tải dữ liệu');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handlePublish = async (courseId) => {
     try {

@@ -15,7 +15,8 @@ import {
   StarIcon,
   DocumentTextIcon,
   AcademicCapIcon,
-  ArrowLeftIcon
+  ArrowLeftIcon,
+  CreditCardIcon
 } from '@heroicons/react/24/outline';
 
 export default function CourseDetailPage() {
@@ -26,6 +27,7 @@ export default function CourseDetailPage() {
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
   const [activeModule, setActiveModule] = useState(null);
+  const [isEnrolled, setIsEnrolled] = useState(false);
 
   useEffect(() => {
     fetchCourse();
@@ -35,6 +37,7 @@ export default function CourseDetailPage() {
     try {
       const response = await courseService.getCourseById(id);
       setCourse(response.data);
+      setIsEnrolled(response.data.isEnrolled || false);
       if (response.data.modules?.length > 0) {
         setActiveModule(response.data.modules[0]);
       }
@@ -46,18 +49,41 @@ export default function CourseDetailPage() {
     }
   };
 
-  const handleEnroll = async () => {
+  // Hàm xử lý khi bấm "Bắt đầu học ngay" - Chuyển đến thanh toán
+  const handleStartLearning = () => {
     if (!isAuthenticated) {
       toast.error('Vui lòng đăng nhập để đăng ký khóa học');
       navigate('/login');
       return;
     }
 
+    // Nếu khóa học miễn phí, enroll trực tiếp không qua thanh toán
+    if (course.price === 0) {
+      handleFreeEnroll();
+      return;
+    }
+
+    // Chuyển đến trang thanh toán với thông tin khóa học
+    navigate('/checkout', {
+      state: {
+        courseId: course.id,
+        courseTitle: course.title,
+        courseThumbnail: course.thumbnail,
+        amount: course.price,
+        instructorName: course.instructor?.name || 'Giảng viên'
+      }
+    });
+  };
+
+  // Xử lý đăng ký khóa học miễn phí
+  const handleFreeEnroll = async () => {
     setEnrolling(true);
     try {
       await courseService.enrollCourse(id);
       toast.success('Đăng ký khóa học thành công!');
-      fetchCourse(); // Refresh để cập nhật trạng thái
+      setIsEnrolled(true);
+      // Sau khi đăng ký thành công, chuyển đến trang học
+      navigate(`/learning/${course.id}`);
     } catch (error) {
       if (error.response?.status === 400) {
         toast.error('Bạn đã đăng ký khóa học này rồi');
@@ -69,7 +95,8 @@ export default function CourseDetailPage() {
     }
   };
 
-  const handleStartLearning = () => {
+  // Xử lý khi đã học (chuyển đến trang học tập)
+  const handleGoToLearning = () => {
     navigate(`/learning/${course.id}`);
   };
 
@@ -96,6 +123,12 @@ export default function CourseDetailPage() {
   };
 
   const levelStyle = levelMap[course.level] || levelMap.BEGINNER;
+
+  // Tính tổng thời lượng
+  const totalDuration = course.modules?.reduce((acc, m) => 
+    acc + (m.lessons?.reduce((sum, l) => sum + (l.duration || 0), 0) || 0), 0) || 0;
+  
+  const totalLessons = course.modules?.reduce((acc, m) => acc + (m.lessons?.length || 0), 0) || 0;
 
   return (
     <div className="pt-16 min-h-screen">
@@ -186,18 +219,27 @@ export default function CourseDetailPage() {
                 <div className="text-3xl font-bold text-white mb-2">
                   {course.price === 0 ? 'Miễn phí' : `${course.price} USD`}
                 </div>
-                {course.isEnrolled ? (
-                  <PrimaryButton onClick={handleStartLearning} className="w-full">
+                {isEnrolled ? (
+                  <PrimaryButton onClick={handleGoToLearning} className="w-full">
                     <PlayCircleIcon className="w-5 h-5 mr-2 inline" />
                     Bắt đầu học ngay
                   </PrimaryButton>
                 ) : (
                   <PrimaryButton 
-                    onClick={handleEnroll} 
+                    onClick={handleStartLearning} 
                     disabled={enrolling}
                     className="w-full"
                   >
-                    {enrolling ? 'Đang xử lý...' : 'Đăng ký ngay'}
+                    {enrolling ? (
+                      'Đang xử lý...'
+                    ) : course.price === 0 ? (
+                      'Đăng ký ngay'
+                    ) : (
+                      <>
+                        <CreditCardIcon className="w-5 h-5 mr-2 inline" />
+                        Thanh toán ngay
+                      </>
+                    )}
                   </PrimaryButton>
                 )}
               </div>
@@ -205,11 +247,11 @@ export default function CourseDetailPage() {
               <div className="space-y-3 text-sm">
                 <div className="flex items-center justify-between text-gray-300">
                   <span>Thời lượng</span>
-                  <span>~{course.modules?.reduce((acc, m) => acc + (m.lessons?.reduce((sum, l) => sum + (l.duration || 0), 0) || 0), 0) || 0} phút</span>
+                  <span>~{totalDuration} phút</span>
                 </div>
                 <div className="flex items-center justify-between text-gray-300">
                   <span>Bài học</span>
-                  <span>{course.modules?.reduce((acc, m) => acc + (m.lessons?.length || 0), 0) || 0} bài</span>
+                  <span>{totalLessons} bài</span>
                 </div>
                 <div className="flex items-center justify-between text-gray-300">
                   <span>Chương</span>

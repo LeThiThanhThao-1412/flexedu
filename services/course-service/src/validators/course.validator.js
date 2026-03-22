@@ -21,13 +21,13 @@ const updateCourseSchema = Joi.object({
 
 const createModuleSchema = Joi.object({
   title: Joi.string().min(3).max(200).required(),
-  description: Joi.string().max(1000).optional(),
+  description: Joi.string().max(1000).allow('', null),
   order: Joi.number().min(0).required()
 });
 
 const createLessonSchema = Joi.object({
   title: Joi.string().min(3).max(200).required(),
-  description: Joi.string().max(1000).optional(),
+  description: Joi.string().max(1000).optional().allow('', null),
   type: Joi.string().valid('VIDEO', 'TEXT', 'QUIZ').default('VIDEO'),
   content: Joi.string().required(),
   duration: Joi.number().min(0).optional(),
