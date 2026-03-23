@@ -8,32 +8,45 @@ const validators = require('./validators/course.validator');
 
 const app = express();
 const PORT = process.env.PORT || 3003;
-const { authorize } = require('./middleware/auth.middleware'); // 👈 Thêm dòng này
+const { authorize } = require('./middleware/auth.middleware');
+
 // Middleware
 app.use(cors());
 app.use(express.json());
 
+// ========== HEALTH CHECK ==========
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+// ========== LESSON ROUTES (ĐẶT TRƯỚC CÁC ROUTE ĐỘNG) ==========
+// Lấy chi tiết bài học (hỗ trợ bài học miễn phí)
+app.get('/api/lessons/:lessonId', courseController.getLessonById);
+
 // ========== COURSE ROUTES ==========
+// Lấy khóa học của riêng giảng viên
 app.get('/api/courses/my-courses', courseController.getMyCourses);
+
+// Lấy danh sách khóa học (công khai)
+app.get('/api/courses', courseController.getCourses);
+
+// Tạo khóa học
 app.post('/api/courses',
   authorize(['INSTRUCTOR', 'ADMIN']), 
   validate(validators.createCourseSchema),
   courseController.createCourse
 );
 
-app.get('/api/courses',
-  courseController.getCourses
-);
+// Lấy chi tiết khóa học (ROUTE ĐỘNG - ĐẶT SAU CÁC ROUTE CỤ THỂ)
+app.get('/api/courses/:id', courseController.getCourseById);
 
-app.get('/api/courses/:id',
-  courseController.getCourseById
-);
-
+// Cập nhật khóa học
 app.put('/api/courses/:id',
   validate(validators.updateCourseSchema),
   courseController.updateCourse
 );
-// Thay dòng patch thành:
+
+// Xuất bản khóa học
 app.patch('/api/courses/:id/publish', courseController.publishCourse);
 
 // ========== MODULE ROUTES ==========
@@ -42,27 +55,15 @@ app.post('/api/courses/:courseId/modules',
   courseController.addModule
 );
 
-// ========== LESSON ROUTES ==========
+// ========== LESSON ROUTES (POST) ==========
 app.post('/api/modules/:moduleId/lessons',
   validate(validators.createLessonSchema),
   courseController.addLesson
 );
 
 // ========== ENROLLMENT ROUTES ==========
-app.post('/api/courses/:courseId/enroll',
-  courseController.enrollCourse
-);
-
-app.post('/api/progress',
-  validate(validators.updateProgressSchema),
-  courseController.updateProgress
-);
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
+app.post('/api/courses/:courseId/enroll', courseController.enrollCourse);
+app.post('/api/progress', validate(validators.updateProgressSchema), courseController.updateProgress);
 
 // Start server
 app.listen(PORT, () => {

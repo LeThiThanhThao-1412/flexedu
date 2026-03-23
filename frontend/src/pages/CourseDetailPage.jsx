@@ -196,13 +196,30 @@ export default function CourseDetailPage() {
                     {activeModule?.id === module.id && (
                       <div className="mt-3 ml-4 space-y-2">
                         {module.lessons?.map((lesson, lessonIdx) => (
-                          <div key={lesson.id} className="flex items-center text-gray-400 text-sm">
-                            <PlayCircleIcon className="w-4 h-4 mr-2" />
-                            <span>Bài {lessonIdx + 1}: {lesson.title}</span>
+                          <Link
+                            key={lesson.id}
+                            to={`/lessons/${lesson.id}`}
+                            className="flex items-center justify-between py-2 hover:bg-white/5 rounded-lg px-2 transition-colors group"
+                          >
+                            <div className="flex items-center space-x-3">
+                              {lesson.isFree ? (
+                                <PlayCircleIcon className="w-4 h-4 text-green-400" />
+                              ) : (
+                                <PlayCircleIcon className="w-4 h-4 text-gray-500" />
+                              )}
+                              <span className="text-gray-300 group-hover:text-white transition-colors">
+                                Bài {lessonIdx + 1}: {lesson.title}
+                              </span>
+                              {lesson.isFree && (
+                                <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-400 rounded-full">
+                                  Miễn phí
+                                </span>
+                              )}
+                            </div>
                             {lesson.duration && (
-                              <span className="ml-2 text-xs">({lesson.duration} phút)</span>
+                              <span className="text-xs text-gray-500">{lesson.duration} phút</span>
                             )}
-                          </div>
+                          </Link>
                         ))}
                       </div>
                     )}

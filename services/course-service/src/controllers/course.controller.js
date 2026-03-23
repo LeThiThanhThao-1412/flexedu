@@ -635,6 +635,99 @@ async getMyCourses(req, res) {
     });
   }
 }
+// Lấy chi tiết bài học (kiểm tra quyền xem)
+async getLessonById(req, res) {
+  try {
+    const { lessonId } = req.params;
+    const userId = req.headers['x-user-id'];
+    
+    console.log('🔍 Get lesson:', lessonId, 'User:', userId);
+    
+    // Kiểm tra ID hợp lệ
+    if (!lessonId || lessonId.length !== 24) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid lesson ID'
+      });
+    }
+    
+    // Lấy bài học
+    const lesson = await prisma.lesson.findUnique({
+      where: { id: lessonId },
+      include: {
+        module: {
+          include: {
+            course: true
+          }
+        }
+      }
+    });
+    
+    if (!lesson) {
+      return res.status(404).json({
+        success: false,
+        message: 'Lesson not found'
+      });
+    }
+    
+    console.log('📚 Lesson found:', lesson.title, 'isFree:', lesson.isFree);
+    
+    // 🔥 KIỂM TRA: Bài học miễn phí thì ai cũng xem được
+    if (lesson.isFree) {
+      console.log('✅ Free lesson, allowing access');
+      return res.json({
+        success: true,
+        data: lesson,
+        isFree: true
+      });
+    }
+    
+    // Bài học không miễn phí: cần đăng nhập
+    if (!userId) {
+      console.log('❌ Not logged in, denying access');
+      return res.status(401).json({
+        success: false,
+        message: 'Please login to access this lesson'
+      });
+    }
+    
+    // Kiểm tra đã đăng ký khóa học chưa
+    const enrollment = await prisma.enrollment.findUnique({
+      where: {
+        userId_courseId: {
+          userId,
+          courseId: lesson.module.course.id
+        }
+      }
+    });
+    
+    if (!enrollment) {
+  return res.status(403).json({
+    success: false,
+    message: 'Bạn cần đăng ký khóa học để xem bài học này',
+    // Bổ sung object này để Frontend có dữ liệu chuyển sang Checkout
+    courseInfo: {
+      id: lesson.module.course._id || lesson.module.course.id,
+      title: lesson.module.course.title,
+      price: lesson.module.course.price,
+      thumbnail: lesson.module.course.thumbnail
+    }
+  });}
+    
+    console.log('✅ Enrolled, allowing access');
+    res.json({
+      success: true,
+      data: lesson,
+      isFree: false
+    });
+  } catch (error) {
+    console.error('Get lesson error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+}
 }
 
 module.exports = new CourseController();

@@ -12,6 +12,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import CheckoutPage from './pages/CheckoutPage';
 import CoursesPage from './pages/CoursesPage';
+import LessonPlayer from './components/learning/LessonPlayer';
 import CourseDetailPage from './pages/CourseDetailPage';
 import LearningPage from './pages/LearningPage';
 import InstructorDashboard from './pages/InstructorDashboard';
@@ -58,7 +59,7 @@ function App() {
           </ProtectedRoute>
         } />
         {/* Checkout - Trang thanh toán */}
-        <Route path="/checkout" element={
+        <Route path="/checkout/:courseId?" element={
           <ProtectedRoute>
             <CheckoutPage />
           </ProtectedRoute>
@@ -74,7 +75,7 @@ function App() {
             <InstructorDashboard />
           </ProtectedRoute>
         } />
-        
+        <Route path="/lessons/:lessonId" element={<LessonPlayer />} />
         {/* Admin Routes */}
         <Route path="/admin" element={
           <ProtectedRoute allowedRoles={['ADMIN']}>

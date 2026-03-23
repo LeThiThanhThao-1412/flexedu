@@ -73,7 +73,7 @@ app.use('/api/progress', createProxy(services.enrollment));
 app.use('/api/payments', createProxy(services.payment));
 app.use('/api/orders', createProxy(services.payment));
 app.use('/api/users', createProxy(services.user));
-
+app.use('/api/lessons', createProxy(services.course));
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'open-gateway-active', services }));
 

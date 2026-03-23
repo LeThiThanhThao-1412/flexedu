@@ -17,6 +17,26 @@ import {
   ClockIcon
 } from '@heroicons/react/24/outline';
 
+// Helper xử lý YouTube URL
+const getYouTubeEmbedUrl = (url) => {
+  if (!url) return '';
+  if (url.includes('youtube.com/embed/')) return url;
+  if (url.includes('youtube.com/watch?v=')) {
+    const videoId = url.split('v=')[1]?.split('&')[0];
+    return `https://www.youtube.com/embed/${videoId}`;
+  }
+  if (url.includes('youtu.be/')) {
+    const videoId = url.split('/').pop()?.split('?')[0];
+    return `https://www.youtube.com/embed/${videoId}`;
+  }
+  return url;
+};
+
+const isYouTubeUrl = (url) => {
+  if (!url) return false;
+  return url.includes('youtube.com') || url.includes('youtu.be');
+};
+
 export default function LearningPage() {
   const { courseId } = useParams();
   const navigate = useNavigate();
@@ -39,7 +59,6 @@ export default function LearningPage() {
       const response = await courseService.getCourseById(courseId);
       setCourse(response.data);
       
-      // Set first lesson as default
       const firstModule = response.data.modules?.[0];
       const firstLesson = firstModule?.lessons?.[0];
       if (firstLesson) {
@@ -54,31 +73,14 @@ export default function LearningPage() {
     }
   };
 
-  // Load tiến độ từ localStorage
   const loadProgressFromLocal = () => {
     const savedCompleted = localStorage.getItem(`completed_lessons_${courseId}`);
     if (savedCompleted) {
       const completed = JSON.parse(savedCompleted);
       setCompletedLessons(completed);
-      // Tính tiến độ
-      const allLessons = getAllLessonIdsFromStorage();
-      if (allLessons.length > 0) {
-        const completedCount = allLessons.filter(id => completed.includes(id)).length;
-        const newProgress = Math.round((completedCount / allLessons.length) * 100);
-        setProgress(newProgress);
-      }
     }
   };
 
-  // Lấy tất cả lesson IDs từ course (dùng cho localStorage)
-  const getAllLessonIdsFromStorage = () => {
-    if (!course?.modules) return [];
-    return course.modules.flatMap(module => 
-      module.lessons?.map(lesson => lesson.id) || []
-    );
-  };
-
-  // Lấy tất cả lesson IDs trong khóa học
   const getAllLessonIds = () => {
     if (!course?.modules) return [];
     return course.modules.flatMap(module => 
@@ -86,7 +88,6 @@ export default function LearningPage() {
     );
   };
 
-  // Tính tiến độ dựa trên số lesson đã hoàn thành
   const calculateProgress = (completedIds) => {
     const allLessonIds = getAllLessonIds();
     if (allLessonIds.length === 0) return 0;
@@ -94,30 +95,25 @@ export default function LearningPage() {
     return Math.round((completedCount / allLessonIds.length) * 100);
   };
 
-  // Đánh dấu bài học hoàn thành
+  const saveProgress = (completedIds) => {
+    const newProgress = calculateProgress(completedIds);
+    setProgress(newProgress);
+    localStorage.setItem(`completed_lessons_${courseId}`, JSON.stringify(completedIds));
+  };
+
   const markLessonComplete = async () => {
     if (!currentLesson) return;
     if (completedLessons.includes(currentLesson.id)) {
-      toast('Bài học này đã được đánh dấu hoàn thành rồi!', {
-        icon: '✅',
-      });
+      toast('Bài học này đã được đánh dấu hoàn thành rồi!', { icon: '✅' });
       return;
     }
 
     setUpdatingProgress(true);
     try {
-      // Cập nhật state local
       const newCompletedLessons = [...completedLessons, currentLesson.id];
       setCompletedLessons(newCompletedLessons);
+      saveProgress(newCompletedLessons);
       
-      // Lưu vào localStorage
-      localStorage.setItem(`completed_lessons_${courseId}`, JSON.stringify(newCompletedLessons));
-      
-      // Tính lại tiến độ
-      const newProgress = calculateProgress(newCompletedLessons);
-      setProgress(newProgress);
-      
-      // Gọi API cập nhật tiến độ (nếu có)
       try {
         await courseService.updateProgress({
           lessonId: currentLesson.id,
@@ -131,11 +127,9 @@ export default function LearningPage() {
       
       toast.success('🎉 Hoàn thành bài học! Tiếp tục nào!');
       
-      // Tự động chuyển sang bài tiếp theo sau 1.5 giây
       setTimeout(() => {
         handleNextLesson();
       }, 1500);
-      
     } catch (error) {
       console.error('Failed to mark lesson complete:', error);
       toast.error('Không thể cập nhật tiến độ, vui lòng thử lại');
@@ -144,11 +138,9 @@ export default function LearningPage() {
     }
   };
 
-  // Chuyển đến bài học tiếp theo
   const handleNextLesson = () => {
     if (!course?.modules) return;
     
-    // Tìm tất cả lessons theo thứ tự
     const allLessons = [];
     course.modules.forEach(module => {
       module.lessons?.forEach(lesson => {
@@ -164,25 +156,18 @@ export default function LearningPage() {
     if (currentIndex < allLessons.length - 1) {
       const nextLesson = allLessons[currentIndex + 1];
       setCurrentLesson(nextLesson);
-      // Tìm module chứa bài học tiếp theo
       const nextModule = course.modules.find(m => m.id === nextLesson.moduleId);
       setCurrentModule(nextModule);
-      
-      // Scroll lên đầu trang
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
-      // Đã hoàn thành tất cả bài học
       if (completedLessons.length === allLessons.length) {
         toast.success('🏆 Chúc mừng! Bạn đã hoàn thành xuất sắc khóa học!');
       } else {
-        toast('📚 Bạn đã học xong tất cả bài học! Hãy đánh dấu hoàn thành các bài còn lại.', {
-          icon: '🎯',
-        });
+        toast('📚 Bạn đã học xong tất cả bài học! Hãy đánh dấu hoàn thành các bài còn lại.', { icon: '🎯' });
       }
     }
   };
 
-  // Chuyển đến bài học trước đó
   const handlePrevLesson = () => {
     if (!course?.modules) return;
     
@@ -207,7 +192,6 @@ export default function LearningPage() {
     }
   };
 
-  // Chọn bài học từ sidebar
   const handleSelectLesson = (lesson, module) => {
     setCurrentLesson(lesson);
     setCurrentModule(module);
@@ -236,6 +220,7 @@ export default function LearningPage() {
 
   const allLessonsCount = getAllLessonIds().length;
   const completedCount = completedLessons.length;
+  const currentProgress = progress || calculateProgress(completedLessons);
 
   return (
     <div className="pt-16 min-h-screen bg-gradient-to-br from-slate-900 to-purple-900">
@@ -247,16 +232,15 @@ export default function LearningPage() {
             Quay lại khóa học
           </Link>
           
-          {/* Progress Bar */}
           <div className="flex items-center space-x-3 bg-white/10 px-4 py-2 rounded-full">
             <AcademicCapIcon className="w-4 h-4 text-blue-400" />
             <div className="w-32 bg-white/20 rounded-full h-2">
               <div
                 className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${progress}%` }}
+                style={{ width: `${currentProgress}%` }}
               />
             </div>
-            <span className="text-sm text-gray-300">{progress}% hoàn thành</span>
+            <span className="text-sm text-gray-300">{currentProgress}% hoàn thành</span>
           </div>
         </div>
 
@@ -266,13 +250,25 @@ export default function LearningPage() {
             <GlassCard className="overflow-hidden">
               <div className="aspect-video bg-black flex items-center justify-center">
                 {currentLesson?.type === 'VIDEO' && currentLesson?.content ? (
-                  <video
-                    ref={videoRef}
-                    src={currentLesson.content}
-                    controls
-                    className="w-full h-full"
-                    onEnded={markLessonComplete}
-                  />
+                  isYouTubeUrl(currentLesson.content) ? (
+                    <iframe
+                      src={getYouTubeEmbedUrl(currentLesson.content)}
+                      className="w-full h-full"
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      title={currentLesson.title}
+                    />
+                  ) : (
+                    <video
+                      ref={videoRef}
+                      src={currentLesson.content}
+                      controls
+                      className="w-full h-full"
+                      onEnded={markLessonComplete}
+                      controlsList="nodownload"
+                    />
+                  )
                 ) : (
                   <div className="text-center p-8">
                     <BookOpenIcon className="w-16 h-16 text-gray-600 mx-auto mb-4" />
@@ -291,9 +287,7 @@ export default function LearningPage() {
             <GlassCard className="p-6">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <p className="text-blue-400 text-sm mb-1">
-                    {currentModule?.title || 'Bài học'}
-                  </p>
+                  <p className="text-blue-400 text-sm mb-1">{currentModule?.title || 'Bài học'}</p>
                   <h2 className="text-xl font-bold text-white">{currentLesson?.title}</h2>
                 </div>
                 {currentLesson?.duration && (
@@ -349,9 +343,8 @@ export default function LearningPage() {
             </GlassCard>
           </div>
 
-          {/* Sidebar - Course Content & Progress */}
+          {/* Sidebar */}
           <div className="space-y-4">
-            {/* Progress Card */}
             <GlassCard className="p-5">
               <h3 className="text-sm font-semibold text-white mb-3 flex items-center">
                 <AcademicCapIcon className="w-5 h-5 mr-2 text-blue-400" />
@@ -360,21 +353,20 @@ export default function LearningPage() {
               <div className="w-full bg-white/10 rounded-full h-3 mb-3">
                 <div
                   className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500"
-                  style={{ width: `${progress}%` }}
+                  style={{ width: `${currentProgress}%` }}
                 />
               </div>
               <div className="flex justify-between text-sm">
                 <p className="text-gray-400">{completedCount} / {allLessonsCount} bài học</p>
-                <p className="text-blue-400 font-medium">{progress}% hoàn thành</p>
+                <p className="text-blue-400 font-medium">{currentProgress}% hoàn thành</p>
               </div>
-              {progress === 100 && (
+              {currentProgress === 100 && (
                 <div className="mt-3 p-2 bg-green-600/20 rounded-lg text-center">
                   <p className="text-green-400 text-sm">🎉 Chúc mừng! Bạn đã hoàn thành khóa học!</p>
                 </div>
               )}
             </GlassCard>
 
-            {/* Course Content */}
             <GlassCard className="p-5">
               <h3 className="text-lg font-semibold text-white mb-4">Nội dung khóa học</h3>
               <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
