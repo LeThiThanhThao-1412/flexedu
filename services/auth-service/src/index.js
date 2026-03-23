@@ -31,7 +31,7 @@ app.post('/api/auth/refresh',
 );
 
 app.post('/api/auth/verify', authController.verifyToken);
-
+app.get('/api/auth/user/:userId', authController.getUserById);
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });

@@ -97,6 +97,7 @@ services:
       # THÊM replicaSet=rs0 và directConnection=false
       - DATABASE_URL=mongodb://mongodb:27017/flexedu_courses?replicaSet=rs0
       - REDIS_HOST=redis
+      - AUTH_SERVICE_URL=http://auth-service:3001
       - REDIS_PORT=6379
     volumes:
       - ../../services/course-service:/app

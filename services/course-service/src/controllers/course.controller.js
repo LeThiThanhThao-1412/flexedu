@@ -8,85 +8,114 @@ const prisma = new PrismaClient();
 class CourseController {
   // ========== COURSE CRUD ==========
   
-  // Tạo khóa học
-  async createCourse(req, res) {
-    try {
-      const { title, description, price, level, categoryId, thumbnail } = req.body;
-      const instructorId = req.headers['x-user-id']; // Từ API Gateway
+  // services/course-service/src/controllers/course.controller.js
+// Sửa method createCourse
 
-      if (!instructorId) {
-        return res.status(401).json({
-          success: false,
-          message: 'User not authenticated'
-        });
-      }
-
-      // Tạo slug từ title
-      const slug = slugify(title, { lower: true, strict: true });
-
-      // Kiểm tra slug đã tồn tại
-      const existing = await prisma.course.findUnique({
-        where: { slug }
-      });
-
-      if (existing) {
-        return res.status(400).json({
-          success: false,
-          message: 'Course with similar title already exists'
-        });
-      }
-
-      // Tạo khóa học
-      const course = await prisma.course.create({
-        data: {
-          title,
-          slug,
-          description,
-          price: parseFloat(price),
-          level,
-          instructorId,
-          categoryId,
-          thumbnail,
-          status: 'DRAFT'
-        },
-        include: {
-          category: true
-        }
-      });
-
-      // Xóa cache
-      await redisClient.del('courses:list');
-
-      res.status(201).json({
-        success: true,
-        message: 'Course created successfully',
-        data: course
-      });
-    } catch (error) {
-      console.error('Create course error:', error);
-      res.status(500).json({
+async createCourse(req, res) {
+  try {
+    const { title, description, price, level, categoryId, thumbnail } = req.body;
+    
+    // Lấy user từ middleware
+    const user = req.user;
+    
+    if (!user) {
+      return res.status(401).json({
         success: false,
-        message: 'Internal server error'
+        message: 'User not authenticated'
       });
     }
+    
+    // 🔥 KIỂM TRA: Giảng viên phải được duyệt
+    if (user.role === 'INSTRUCTOR' && !user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your instructor account is pending admin approval. You cannot create courses yet.'
+      });
+    }
+    
+    // Instructor phải có role INSTRUCTOR hoặc ADMIN
+    if (user.role !== 'INSTRUCTOR' && user.role !== 'ADMIN') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only instructors can create courses'
+      });
+    }
+    
+    const instructorId = user.userId || user.id;
+    
+    console.log('Creating course for instructor:', instructorId, 'Role:', user.role, 'Active:', user.isActive);
+    
+    // Tạo slug từ title
+    const slug = slugify(title, { lower: true, strict: true });
+    
+    // Kiểm tra slug đã tồn tại
+    const existing = await prisma.course.findUnique({
+      where: { slug }
+    });
+    
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: 'Course with similar title already exists'
+      });
+    }
+    
+    // Tạo khóa học
+    const course = await prisma.course.create({
+      data: {
+        title,
+        slug,
+        description,
+        price,
+        level,
+        instructorId,
+        categoryId,
+        thumbnail,
+        status: 'DRAFT'
+      },
+      include: {
+        category: true
+      }
+    });
+    
+    // Xóa cache
+    await redisClient.del('courses:list');
+    
+    res.status(201).json({
+      success: true,
+      message: 'Course created successfully',
+      data: course
+    });
+  } catch (error) {
+    console.error('Create course error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
   }
+}
 
   // Lấy danh sách khóa học (có phân trang, filter)
   // services/course-service/src/controllers/course.controller.js
 
+// services/course-service/src/controllers/course.controller.js
+// Sửa getCourses để chỉ hiện khóa học của giảng viên đã duyệt
+
 async getCourses(req, res) {
   try {
-    // 1. Lấy status từ query, nếu không có mới để mặc định là PUBLISHED
     const { page = 1, limit = 10, status = 'PUBLISHED', category, level, search } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    // 2. Xây dựng filter (where clause)
-    const where = {};
     
-    // Nếu người dùng truyền status='ALL', chúng ta bỏ qua lọc theo status để thấy hết
-    if (status !== 'ALL') {
-      where.status = status;
-    }
+    // Xây dựng filter
+    const where = { status: 'PUBLISHED' };
+    
+    // 🔥 CHỈ HIỆN KHÓA HỌC CỦA GIẢNG VIÊN ĐÃ DUYỆT
+    // Lấy danh sách instructor đã duyệt
+    // Cách 1: Join với user service (phức tạp)
+    // Cách 2: Thêm field instructorIsActive vào course? (cần sync)
+    
+    // Tạm thời: chỉ hiện khóa học PUBLISHED
+    // Khóa học của giảng viên chưa duyệt sẽ không được publish
     
     if (category) {
       where.categoryId = category;
@@ -99,8 +128,7 @@ async getCourses(req, res) {
     if (search) {
       where.title = { contains: search, mode: 'insensitive' };
     }
-
-    // 3. Quản lý Cache
+    
     const cacheKey = `courses:list:${page}:${limit}:${status}:${category || 'all'}:${level || 'all'}:${search || 'none'}`;
     let cachedData = await redisClient.get(cacheKey);
     
@@ -110,8 +138,7 @@ async getCourses(req, res) {
         data: cachedData
       });
     }
-
-    // 4. Truy vấn Database
+    
     const [courses, total] = await Promise.all([
       prisma.course.findMany({
         where,
@@ -127,7 +154,7 @@ async getCourses(req, res) {
       }),
       prisma.course.count({ where })
     ]);
-
+    
     const result = {
       courses,
       pagination: {
@@ -137,10 +164,9 @@ async getCourses(req, res) {
         totalPages: Math.ceil(total / parseInt(limit))
       }
     };
-
-    // Lưu cache trong 5 phút
+    
     await redisClient.set(cacheKey, result, 300);
-
+    
     res.json({
       success: true,
       data: result
@@ -150,7 +176,6 @@ async getCourses(req, res) {
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 }
-
   // Lấy chi tiết khóa học
   async getCourseById(req, res) {
   try {

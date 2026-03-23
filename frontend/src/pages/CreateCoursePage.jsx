@@ -216,7 +216,7 @@ export default function CreateCoursePage() {
     console.log('📤 Sending course data:', {
       title: courseData.title,
       description: courseData.description,
-      price: courseData.price,
+      price: Number(courseData.price),
       level: courseData.level,
       thumbnail: courseData.thumbnail || undefined,
       modulesCount: modules.length,
@@ -229,7 +229,7 @@ export default function CreateCoursePage() {
       const response = await courseService.createCourse({
         title: courseData.title,
         description: courseData.description,
-        price: courseData.price,
+        price: Number(courseData.price),
         level: courseData.level,
         thumbnail: courseData.thumbnail || undefined,
       });
