@@ -19,6 +19,7 @@ const updateCourseSchema = Joi.object({
   categoryId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional()
 });
 
+// Đảm bảo schema cho module
 const createModuleSchema = Joi.object({
   title: Joi.string().min(3).max(200).required(),
   description: Joi.string().max(1000).allow('', null),

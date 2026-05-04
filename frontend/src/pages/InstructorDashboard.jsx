@@ -15,8 +15,7 @@ import {
   CurrencyDollarIcon,
   AcademicCapIcon,
   EyeIcon,
-  CheckCircleIcon,
-  ClockIcon
+  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 
 export default function InstructorDashboard() {
@@ -33,36 +32,31 @@ export default function InstructorDashboard() {
     fetchData();
   }, []);
 
-  // frontend/src/pages/InstructorDashboard.jsx
-// Sửa fetchData
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const response = await courseService.getMyCourses({ status: 'ALL' });
+      console.log('My courses response:', response);
+      
+      const coursesData = response.data.courses || [];
+      setCourses(coursesData);
 
-const fetchData = async () => {
-  setLoading(true);
-  try {
-    // Gọi API lấy khóa học của riêng giảng viên
-    const response = await courseService.getMyCourses({ status: 'ALL' });
-    console.log('My courses response:', response);
-    
-    const coursesData = response.data.courses || [];
-    setCourses(coursesData);
-
-    // Calculate stats từ khóa học của riêng giảng viên
-    const totalStudents = coursesData.reduce((sum, c) => sum + (c._count?.enrollments || 0), 0);
-    const totalRevenue = coursesData.reduce((sum, c) => sum + (c.price * (c._count?.enrollments || 0)), 0);
-    
-    setStats({
-      totalCourses: coursesData.length,
-      totalStudents,
-      totalRevenue,
-      completionRate: 0,
-    });
-  } catch (error) {
-    console.error('Failed to fetch courses:', error);
-    toast.error('Không thể tải dữ liệu');
-  } finally {
-    setLoading(false);
-  }
-};
+      const totalStudents = coursesData.reduce((sum, c) => sum + (c._count?.enrollments || 0), 0);
+      const totalRevenue = coursesData.reduce((sum, c) => sum + (c.price * (c._count?.enrollments || 0)), 0);
+      
+      setStats({
+        totalCourses: coursesData.length,
+        totalStudents,
+        totalRevenue,
+        completionRate: 0,
+      });
+    } catch (error) {
+      console.error('Failed to fetch courses:', error);
+      toast.error('Không thể tải dữ liệu');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handlePublish = async (courseId) => {
     try {
@@ -90,7 +84,7 @@ const fetchData = async () => {
   }
 
   return (
-    <div className="pt-16 min-h-screen">
+    <div className="pt-16 min-h-screen bg-gradient-to-br from-slate-900 to-purple-900">
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
@@ -175,8 +169,13 @@ const fetchData = async () => {
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
+                    <Link to={`/instructor/courses/${course.id}/content`}>
+                      <button className="p-2 text-blue-400 hover:text-blue-300 transition" title="Quản lý nội dung">
+                        <DocumentTextIcon className="w-5 h-5" />
+                      </button>
+                    </Link>
                     <Link to={`/instructor/courses/${course.id}/edit`}>
-                      <button className="p-2 text-gray-400 hover:text-white transition">
+                      <button className="p-2 text-gray-400 hover:text-white transition" title="Chỉnh sửa thông tin">
                         <PencilIcon className="w-5 h-5" />
                       </button>
                     </Link>

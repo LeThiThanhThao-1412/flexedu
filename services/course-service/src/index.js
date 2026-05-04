@@ -10,62 +10,39 @@ const app = express();
 const PORT = process.env.PORT || 3003;
 const { authorize } = require('./middleware/auth.middleware');
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// ========== HEALTH CHECK ==========
+// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-// ========== LESSON ROUTES (ĐẶT TRƯỚC CÁC ROUTE ĐỘNG) ==========
-// Lấy chi tiết bài học (hỗ trợ bài học miễn phí)
+// ========== LESSON ROUTES ==========
 app.get('/api/lessons/:lessonId', courseController.getLessonById);
 
 // ========== COURSE ROUTES ==========
-// Lấy khóa học của riêng giảng viên
 app.get('/api/courses/my-courses', courseController.getMyCourses);
-
-// Lấy danh sách khóa học (công khai)
 app.get('/api/courses', courseController.getCourses);
-
-// Tạo khóa học
-app.post('/api/courses',
-  authorize(['INSTRUCTOR', 'ADMIN']), 
-  validate(validators.createCourseSchema),
-  courseController.createCourse
-);
-
-// Lấy chi tiết khóa học (ROUTE ĐỘNG - ĐẶT SAU CÁC ROUTE CỤ THỂ)
+app.post('/api/courses', authorize(['INSTRUCTOR', 'ADMIN']), validate(validators.createCourseSchema), courseController.createCourse);
 app.get('/api/courses/:id', courseController.getCourseById);
-
-// Cập nhật khóa học
-app.put('/api/courses/:id',
-  validate(validators.updateCourseSchema),
-  courseController.updateCourse
-);
-
-// Xuất bản khóa học
+app.put('/api/courses/:id', validate(validators.updateCourseSchema), courseController.updateCourse);
 app.patch('/api/courses/:id/publish', courseController.publishCourse);
 
 // ========== MODULE ROUTES ==========
-app.post('/api/courses/:courseId/modules',
-  validate(validators.createModuleSchema),
-  courseController.addModule
-);
+app.post('/api/courses/:courseId/modules', validate(validators.createModuleSchema), courseController.addModule);
+app.put('/api/modules/:moduleId', authorize(['INSTRUCTOR', 'ADMIN']), validate(validators.createModuleSchema), courseController.updateModule);
+app.delete('/api/modules/:moduleId', authorize(['INSTRUCTOR', 'ADMIN']), courseController.deleteModule);
 
-// ========== LESSON ROUTES (POST) ==========
-app.post('/api/modules/:moduleId/lessons',
-  validate(validators.createLessonSchema),
-  courseController.addLesson
-);
+// ========== LESSON ROUTES ==========
+app.post('/api/modules/:moduleId/lessons', validate(validators.createLessonSchema), courseController.addLesson);
+app.put('/api/lessons/:lessonId', authorize(['INSTRUCTOR', 'ADMIN']), validate(validators.createLessonSchema), courseController.updateLesson);
+app.delete('/api/lessons/:lessonId', authorize(['INSTRUCTOR', 'ADMIN']), courseController.deleteLesson);
 
 // ========== ENROLLMENT ROUTES ==========
 app.post('/api/courses/:courseId/enroll', courseController.enrollCourse);
 app.post('/api/progress', validate(validators.updateProgressSchema), courseController.updateProgress);
 
-// Start server
 app.listen(PORT, () => {
   console.log(`✅ Course Service running on port ${PORT}`);
 });

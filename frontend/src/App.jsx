@@ -12,6 +12,8 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import CheckoutPage from './pages/CheckoutPage';
 import CoursesPage from './pages/CoursesPage';
+import ManageContentPage from './pages/ManageContentPage';
+import EditCoursePage from './pages/EditCoursePage';
 import LessonPlayer from './components/learning/LessonPlayer';
 import CourseDetailPage from './pages/CourseDetailPage';
 import LearningPage from './pages/LearningPage';
@@ -69,10 +71,20 @@ function App() {
             <CreateCoursePage />
           </ProtectedRoute>
         } />
+        <Route path="/instructor/courses/:id/edit" element={
+          <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}>
+            <EditCoursePage />
+          </ProtectedRoute>
+        } />
         {/* Instructor Routes */}
         <Route path="/instructor/courses" element={
           <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}>
             <InstructorDashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/instructor/courses/:courseId/content" element={
+          <ProtectedRoute allowedRoles={['INSTRUCTOR', 'ADMIN']}>
+            <ManageContentPage />
           </ProtectedRoute>
         } />
         <Route path="/lessons/:lessonId" element={<LessonPlayer />} />
@@ -83,7 +95,7 @@ function App() {
           </ProtectedRoute>
         } />
       </Routes>
-    </AuthProvider>
+    </AuthProvider> 
   );
 }
 
