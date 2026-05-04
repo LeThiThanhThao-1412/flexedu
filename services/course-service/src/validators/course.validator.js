@@ -16,10 +16,10 @@ const updateCourseSchema = Joi.object({
   price: Joi.number().min(0).max(9999).optional(),
   level: Joi.string().valid('BEGINNER', 'INTERMEDIATE', 'ADVANCED').optional(),
   status: Joi.string().valid('DRAFT', 'PUBLISHED', 'ARCHIVED').optional(),
-  categoryId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional()
+  categoryId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional(),
+  thumbnail: Joi.string().uri().optional()
 });
 
-// Đảm bảo schema cho module
 const createModuleSchema = Joi.object({
   title: Joi.string().min(3).max(200).required(),
   description: Joi.string().max(1000).allow('', null),
@@ -32,13 +32,17 @@ const createLessonSchema = Joi.object({
   type: Joi.string().valid('VIDEO', 'TEXT', 'QUIZ').default('VIDEO'),
   content: Joi.string().required(),
   duration: Joi.number().min(0).optional(),
-  order: Joi.number().min(0).required(),
+  order: Joi.number().min(0).optional(),  // Sửa thành optional
   isFree: Joi.boolean().default(false)
 });
 
+// SỬA LẠI SCHEMA NÀY - THÊM CÁC FIELD CÒN THIẾU
 const updateProgressSchema = Joi.object({
   lessonId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required(),
-  completed: Joi.boolean().required()
+  completed: Joi.boolean().required(),
+  totalLessons: Joi.number().optional(),
+  lessonIds: Joi.array().items(Joi.string()).optional(),
+  courseId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional()
 });
 
 module.exports = {

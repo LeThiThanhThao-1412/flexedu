@@ -181,6 +181,52 @@ class CourseController {
     }
   }
 
+  // ========== MY ENROLLMENTS ==========
+  async getMyEnrollments(req, res) {
+    try {
+      const userId = req.headers['x-user-id'];
+      const { page = 1, limit = 10 } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+
+      console.log(`📊 Getting enrollments for user: ${userId}`);
+
+      const enrollments = await prisma.enrollment.findMany({
+        where: { userId },
+        skip,
+        take: parseInt(limit),
+        orderBy: { createdAt: 'desc' },
+        include: { course: true }
+      });
+
+      console.log(`📊 Found ${enrollments.length} enrollments`);
+
+      const total = await prisma.enrollment.count({ where: { userId } });
+
+      const result = {
+        enrollments: enrollments.map(en => ({
+          id: en.id,
+          userId: en.userId,
+          courseId: en.courseId,
+          progress: en.progress || 0,
+          completedAt: en.completedAt,
+          createdAt: en.createdAt,
+          updatedAt: en.updatedAt,
+          course: en.course
+        })),
+        pagination: { page: parseInt(page), limit: parseInt(limit), total }
+      };
+
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error('Get my enrollments error:', error);
+      res.status(500).json({ success: false, message: 'Internal error' });
+    }
+  }
+
   // ========== MODULE MANAGEMENT ==========
   
   async addModule(req, res) {
@@ -243,23 +289,37 @@ class CourseController {
   async addLesson(req, res) {
     try {
       const { moduleId } = req.params;
-      const { title, description, type, content, duration, order, isFree } = req.body;
+      const { title, description, type, content, duration, isFree } = req.body;
+      
+      const lessonCount = await prisma.lesson.count({
+        where: { moduleId }
+      });
+      
       const lesson = await prisma.lesson.create({
-        data: { title, description, type, content, duration, order, isFree, moduleId },
+        data: { 
+          title, 
+          description, 
+          type, 
+          content, 
+          duration, 
+          order: lessonCount,
+          isFree: isFree || false, 
+          moduleId 
+        },
         include: { module: { include: { course: true } } }
       });
       await redisClient.del(`course:${lesson.module.course.id}`);
       res.status(201).json({ success: true, message: 'Lesson added successfully', data: lesson });
     } catch (error) {
       console.error('Add lesson error:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json({ success: false, message: error.message });
     }
   }
 
   async updateLesson(req, res) {
     try {
       const { lessonId } = req.params;
-      const { title, description, type, content, duration, order, isFree } = req.body;
+      const { title, description, type, content, duration, isFree } = req.body;
       const instructorId = req.headers['x-user-id'];
       
       const lesson = await prisma.lesson.findUnique({
@@ -271,7 +331,10 @@ class CourseController {
         return res.status(403).json({ success: false, message: 'No permission' });
       }
       
-      const updatedLesson = await prisma.lesson.update({ where: { id: lessonId }, data: { title, description, type, content, duration, order, isFree } });
+      const updatedLesson = await prisma.lesson.update({ 
+        where: { id: lessonId }, 
+        data: { title, description, type, content, duration, isFree } 
+      });
       await redisClient.del(`course:${lesson.module.course.id}`);
       res.json({ success: true, data: updatedLesson });
     } catch (error) {
@@ -373,8 +436,14 @@ class CourseController {
 
   async updateProgress(req, res) {
     try {
-      const { lessonId, completed, lessonIds, totalLessons } = req.body;
+      const { lessonId, completed, lessonIds, totalLessons, courseId } = req.body;
       const userId = req.headers['x-user-id'];
+      
+      console.log('📥 Update progress request:', { lessonId, completed, totalLessons, courseId, userId });
+      
+      if (!userId || !lessonId) {
+        return res.status(400).json({ success: false, message: 'Missing userId or lessonId' });
+      }
       
       const progress = await prisma.lessonProgress.upsert({
         where: { userId_lessonId: { userId, lessonId } },
@@ -382,29 +451,136 @@ class CourseController {
         create: { userId, lessonId, completed, completedAt: completed ? new Date() : null }
       });
       
-      const lesson = await prisma.lesson.findUnique({
-        where: { id: lessonId },
-        include: { module: { include: { course: true } } }
-      });
+      let targetCourseId = courseId;
+      if (!targetCourseId) {
+        const lesson = await prisma.lesson.findUnique({
+          where: { id: lessonId },
+          include: { module: { include: { course: true } } }
+        });
+        if (lesson && lesson.module?.course) {
+          targetCourseId = lesson.module.course.id;
+        }
+      }
       
-      if (totalLessons && lessonIds) {
+      if (targetCourseId && lessonIds && lessonIds.length > 0) {
         const completedLessonsCount = await prisma.lessonProgress.count({
           where: { userId, completed: true, lessonId: { in: lessonIds } }
         });
         const progressPercent = totalLessons > 0 ? (completedLessonsCount / totalLessons) * 100 : 0;
         
-        await prisma.enrollment.update({
-          where: { userId_courseId: { userId, courseId: lesson.module.course.id } },
-          data: { progress: progressPercent, completedAt: progressPercent === 100 ? new Date() : null }
+        const enrollment = await prisma.enrollment.findUnique({
+          where: { userId_courseId: { userId, courseId: targetCourseId } }
         });
         
-        await redisClient.del(`progress:${userId}:${lesson.module.course.id}`);
+        if (enrollment) {
+          await prisma.enrollment.update({
+            where: { id: enrollment.id },
+            data: { progress: progressPercent, completedAt: progressPercent === 100 ? new Date() : null }
+          });
+          console.log(`✅ Updated progress for course ${targetCourseId}: ${progressPercent}%`);
+        } else {
+          await prisma.enrollment.create({
+            data: { userId, courseId: targetCourseId, progress: progressPercent }
+          });
+          console.log(`✅ Created new enrollment for course ${targetCourseId}: ${progressPercent}%`);
+        }
+        
+        await redisClient.del(`progress:${userId}:${targetCourseId}`);
       }
       
-      res.json({ success: true, message: 'Progress updated', data: { progress: progress?.completed || false } });
+      res.json({ success: true, message: 'Progress updated', data: { completed: progress.completed || false } });
     } catch (error) {
       console.error('Update progress error:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  // ========== ADMIN FUNCTIONS ==========
+
+  // Lấy tất cả khóa học (cho admin)
+  async adminGetAllCourses(req, res) {
+    try {
+      const { page = 1, limit = 20, status, search } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      const where = {};
+      
+      if (status && status !== 'ALL') where.status = status;
+      if (search) {
+        where.OR = [
+          { title: { contains: search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } }
+        ];
+      }
+      
+      const [courses, total] = await Promise.all([
+        prisma.course.findMany({
+          where,
+          skip,
+          take: parseInt(limit),
+          orderBy: { createdAt: 'desc' },
+          include: {
+            category: true,
+            _count: { select: { enrollments: true, reviews: true } }
+          }
+        }),
+        prisma.course.count({ where })
+      ]);
+      
+      res.json({
+        success: true,
+        data: {
+          courses,
+          pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages: Math.ceil(total / parseInt(limit)) }
+        }
+      });
+    } catch (error) {
+      console.error('Admin get courses error:', error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  // Admin xóa khóa học
+  async adminDeleteCourse(req, res) {
+    try {
+      const { id } = req.params;
+      
+      const modules = await prisma.module.findMany({ where: { courseId: id } });
+      for (const module of modules) {
+        await prisma.lesson.deleteMany({ where: { moduleId: module.id } });
+      }
+      await prisma.module.deleteMany({ where: { courseId: id } });
+      await prisma.enrollment.deleteMany({ where: { courseId: id } });
+      await prisma.review.deleteMany({ where: { courseId: id } });
+      await prisma.course.delete({ where: { id } });
+      
+      await redisClient.del(`course:${id}`);
+      await redisClient.del('courses:list:*');
+      
+      res.json({ success: true, message: 'Course deleted successfully' });
+    } catch (error) {
+      console.error('Admin delete course error:', error);
+      res.status(500).json({ success: false, message: 'Internal error' });
+    }
+  }
+
+  // Admin duyệt/khóa khóa học
+  async adminUpdateCourseStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      
+      const course = await prisma.course.update({
+        where: { id },
+        data: { status }
+      });
+      
+      await redisClient.del(`course:${id}`);
+      await redisClient.del('courses:list:*');
+      
+      res.json({ success: true, message: `Course status updated to ${status}`, data: course });
+    } catch (error) {
+      console.error('Admin update course status error:', error);
+      res.status(500).json({ success: false, message: 'Internal error' });
     }
   }
 }

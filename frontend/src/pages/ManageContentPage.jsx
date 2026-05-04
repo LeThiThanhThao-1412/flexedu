@@ -1,12 +1,10 @@
 // frontend/src/pages/ManageContentPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { courseService } from '../services/course.service';
 import toast from 'react-hot-toast';
 import { 
   ArrowLeftIcon, 
-  PlusIcon, 
   TrashIcon, 
   VideoCameraIcon, 
   DocumentTextIcon, 
@@ -22,23 +20,22 @@ export default function ManageContentPage() {
   const { courseId } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [course, setCourse] = useState(null);
   const [modules, setModules] = useState([]);
   
-  // State cho editing
   const [editingModule, setEditingModule] = useState(null);
   const [editingLesson, setEditingLesson] = useState(null);
   const [addingModule, setAddingModule] = useState(false);
   const [addingLesson, setAddingLesson] = useState(null);
   
-  // Form data tạm thời khi edit
   const [tempModuleData, setTempModuleData] = useState({ title: '', description: '' });
   const [tempLessonData, setTempLessonData] = useState({
     title: '', description: '', type: 'VIDEO', content: '', duration: 0, isFree: false
   });
   const [newModuleTitle, setNewModuleTitle] = useState('');
   const [newLessonData, setNewLessonData] = useState({
-    title: '', type: 'VIDEO', content: '', duration: 0, isFree: false
+    title: '', type: 'VIDEO', content: '', duration: 0, isFree: false, description: ''
   });
 
   useEffect(() => {
@@ -62,25 +59,36 @@ export default function ManageContentPage() {
     }
   };
 
-  // ========== MODULE FUNCTIONS ==========
-  
   const handleAddModule = async () => {
     if (!newModuleTitle.trim()) {
       toast.error('Vui lòng nhập tên chương');
       return;
     }
+    if (newModuleTitle.trim().length < 3) {
+      toast.error('Tên chương phải có ít nhất 3 ký tự');
+      return;
+    }
+    
+    setSaving(true);
     try {
-      await courseService.addModule(courseId, {
+      const response = await courseService.addModule(courseId, {
         title: newModuleTitle.trim(),
         description: '',
         order: modules.length
       });
-      toast.success('Thêm chương thành công');
-      setNewModuleTitle('');
-      setAddingModule(false);
-      fetchCourse();
+      
+      if (response.success) {
+        toast.success('Thêm chương thành công');
+        setNewModuleTitle('');
+        setAddingModule(false);
+        await fetchCourse();
+      } else {
+        throw new Error(response.message || 'Thêm chương thất bại');
+      }
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Thêm chương thất bại');
+      toast.error(error.response?.data?.message || error.message || 'Thêm chương thất bại');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -97,47 +105,56 @@ export default function ManageContentPage() {
     setTempModuleData({ title: '', description: '' });
   };
 
-  // frontend/src/pages/ManageContentPage.jsx
-// Sửa lại hàm saveModule
-
-const saveModule = async (moduleId) => {
-  if (!tempModuleData.title.trim()) {
-    toast.error('Tên chương không được để trống');
-    return;
-  }
-  try {
-    // Chỉ gửi các trường backend cho phép
-    const updateData = {
-      title: tempModuleData.title.trim(),
-      description: tempModuleData.description.trim() || ''
-    };
+  const saveModule = async (moduleId) => {
+    if (!tempModuleData.title.trim()) {
+      toast.error('Tên chương không được để trống');
+      return;
+    }
+    if (tempModuleData.title.trim().length < 3) {
+      toast.error('Tên chương phải có ít nhất 3 ký tự');
+      return;
+    }
     
-    console.log('📤 Updating module:', { moduleId, updateData });
-    
-    await courseService.updateModule(moduleId, updateData);
-    toast.success('Cập nhật chương thành công');
-    setEditingModule(null);
-    fetchCourse();
-  } catch (error) {
-    console.error('Update module error:', error);
-    console.error('Error response:', error.response?.data);
-    toast.error(error.response?.data?.message || 'Cập nhật thất bại');
-  }
-};
-
-  const handleDeleteModule = async (moduleId) => {
-    if (!confirm('Bạn có chắc muốn xóa chương này? Tất cả bài học sẽ bị xóa!')) return;
+    setSaving(true);
     try {
-      await courseService.deleteModule(moduleId);
-      toast.success('Xóa chương thành công');
-      fetchCourse();
+      const response = await courseService.updateModule(moduleId, {
+        title: tempModuleData.title.trim(),
+        description: tempModuleData.description.trim() || ''
+      });
+      
+      if (response.success) {
+        toast.success('Cập nhật chương thành công');
+        setEditingModule(null);
+        await fetchCourse();
+      } else {
+        throw new Error(response.message || 'Cập nhật thất bại');
+      }
     } catch (error) {
-      toast.error('Xóa chương thất bại');
+      toast.error(error.response?.data?.message || error.message || 'Cập nhật thất bại');
+    } finally {
+      setSaving(false);
     }
   };
 
-  // ========== LESSON FUNCTIONS ==========
-  
+  const handleDeleteModule = async (moduleId) => {
+    if (!confirm('Bạn có chắc muốn xóa chương này? Tất cả bài học sẽ bị xóa!')) return;
+    
+    setSaving(true);
+    try {
+      const response = await courseService.deleteModule(moduleId);
+      if (response.success) {
+        toast.success('Xóa chương thành công');
+        await fetchCourse();
+      } else {
+        throw new Error(response.message || 'Xóa chương thất bại');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || error.message || 'Xóa chương thất bại');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const startEditLesson = (lesson) => {
     setEditingLesson(lesson.id);
     setTempLessonData({
@@ -162,20 +179,47 @@ const saveModule = async (moduleId) => {
       toast.error('Tên bài học không được để trống');
       return;
     }
+    if (tempLessonData.title.trim().length < 3) {
+      toast.error('Tên bài học phải có ít nhất 3 ký tự');
+      return;
+    }
+    if (!tempLessonData.content.trim()) {
+      toast.error('Vui lòng nhập nội dung bài học');
+      return;
+    }
+    
+    if (tempLessonData.type === 'VIDEO') {
+      const url = tempLessonData.content.trim();
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        toast.error('URL video phải bắt đầu bằng http:// hoặc https://');
+        return;
+      }
+    }
+    
+    setSaving(true);
     try {
-      await courseService.updateLesson(lessonId, {
+      // KHÔNG gửi order khi update lesson
+      const response = await courseService.updateLesson(lessonId, {
         title: tempLessonData.title.trim(),
-        description: tempLessonData.description.trim(),
+        description: tempLessonData.description?.trim() || '',
         type: tempLessonData.type,
-        content: tempLessonData.content,
+        content: tempLessonData.content.trim(),
         duration: Number(tempLessonData.duration) || 0,
-        isFree: tempLessonData.isFree
+        isFree: tempLessonData.isFree || false
       });
-      toast.success('Cập nhật bài học thành công');
-      setEditingLesson(null);
-      fetchCourse();
+      
+      if (response.success) {
+        toast.success('Cập nhật bài học thành công');
+        setEditingLesson(null);
+        await fetchCourse();
+      } else {
+        throw new Error(response.message || 'Cập nhật thất bại');
+      }
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Cập nhật thất bại');
+      console.error('Update lesson error:', error);
+      toast.error(error.response?.data?.message || error.message || 'Cập nhật thất bại');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -184,34 +228,77 @@ const saveModule = async (moduleId) => {
       toast.error('Vui lòng nhập tên bài học');
       return;
     }
+    if (newLessonData.title.trim().length < 3) {
+      toast.error('Tên bài học phải có ít nhất 3 ký tự');
+      return;
+    }
+    if (!newLessonData.content.trim()) {
+      toast.error('Vui lòng nhập nội dung bài học');
+      return;
+    }
+    
+    if (newLessonData.type === 'VIDEO') {
+      const url = newLessonData.content.trim();
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        toast.error('URL video phải bắt đầu bằng http:// hoặc https://');
+        return;
+      }
+    }
+    
     const module = modules.find(m => m.id === moduleId);
+    // Tìm order lớn nhất hiện tại + 1
+    let maxOrder = 0;
+    if (module?.lessons && module.lessons.length > 0) {
+      const orders = module.lessons.map(l => l.order || 0);
+      maxOrder = Math.max(...orders) + 1;
+    }
+    
+    setSaving(true);
     try {
-      await courseService.addLesson(moduleId, {
+      const response = await courseService.addLesson(moduleId, {
         title: newLessonData.title.trim(),
-        description: newLessonData.description || '',
+        description: newLessonData.description?.trim() || '',
         type: newLessonData.type,
-        content: newLessonData.content || '',
+        content: newLessonData.content.trim(),
         duration: Number(newLessonData.duration) || 0,
-        order: module?.lessons?.length || 0,
+        order: maxOrder,
         isFree: newLessonData.isFree || false
       });
-      toast.success('Thêm bài học thành công');
-      setNewLessonData({ title: '', type: 'VIDEO', content: '', duration: 0, isFree: false });
-      setAddingLesson(null);
-      fetchCourse();
+      
+      if (response.success) {
+        toast.success('Thêm bài học thành công');
+        setNewLessonData({ 
+          title: '', type: 'VIDEO', content: '', duration: 0, isFree: false, description: '' 
+        });
+        setAddingLesson(null);
+        await fetchCourse();
+      } else {
+        throw new Error(response.message || 'Thêm bài học thất bại');
+      }
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Thêm bài học thất bại');
+      console.error('Add lesson error:', error);
+      toast.error(error.response?.data?.message || error.message || 'Thêm bài học thất bại');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDeleteLesson = async (lessonId) => {
     if (!confirm('Bạn có chắc muốn xóa bài học này?')) return;
+    
+    setSaving(true);
     try {
-      await courseService.deleteLesson(lessonId);
-      toast.success('Xóa bài học thành công');
-      fetchCourse();
+      const response = await courseService.deleteLesson(lessonId);
+      if (response.success) {
+        toast.success('Xóa bài học thành công');
+        await fetchCourse();
+      } else {
+        throw new Error(response.message || 'Xóa bài học thất bại');
+      }
     } catch (error) {
-      toast.error('Xóa bài học thất bại');
+      toast.error(error.response?.data?.message || error.message || 'Xóa bài học thất bại');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -232,7 +319,6 @@ const saveModule = async (moduleId) => {
   return (
     <div className="pt-16 min-h-screen bg-gradient-to-br from-slate-900 to-purple-900">
       <div className="max-w-5xl mx-auto px-4 py-8">
-        {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <Link to="/instructor/courses" className="inline-flex items-center text-gray-400 hover:text-white mb-2 group">
@@ -244,7 +330,6 @@ const saveModule = async (moduleId) => {
           </div>
         </div>
 
-        {/* Add Module Button */}
         <div className="flex justify-end mb-6">
           {addingModule ? (
             <div className="flex gap-2">
@@ -252,15 +337,16 @@ const saveModule = async (moduleId) => {
                 type="text"
                 value={newModuleTitle}
                 onChange={(e) => setNewModuleTitle(e.target.value)}
-                placeholder="Tên chương mới"
+                placeholder="Tên chương mới (tối thiểu 3 ký tự)"
                 className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white w-64"
                 autoFocus
+                disabled={saving}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleAddModule();
                   if (e.key === 'Escape') setAddingModule(false);
                 }}
               />
-              <button onClick={handleAddModule} className="p-2 bg-green-600 rounded-lg hover:bg-green-700">
+              <button onClick={handleAddModule} disabled={saving} className="p-2 bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50">
                 <CheckIcon className="w-5 h-5 text-white" />
               </button>
               <button onClick={() => setAddingModule(false)} className="p-2 bg-red-600 rounded-lg hover:bg-red-700">
@@ -278,7 +364,6 @@ const saveModule = async (moduleId) => {
           )}
         </div>
 
-        {/* Modules List */}
         <div className="space-y-6">
           {modules.length === 0 ? (
             <div className="bg-white/10 rounded-2xl p-12 text-center">
@@ -290,7 +375,6 @@ const saveModule = async (moduleId) => {
           ) : (
             modules.map((module, moduleIdx) => (
               <div key={module.id} className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl overflow-hidden">
-                {/* Module Header */}
                 <div className="p-5 border-b border-white/10 bg-white/5">
                   {editingModule === module.id ? (
                     <div className="space-y-3">
@@ -300,6 +384,7 @@ const saveModule = async (moduleId) => {
                         onChange={(e) => setTempModuleData({ ...tempModuleData, title: e.target.value })}
                         className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-lg font-semibold"
                         placeholder="Tên chương"
+                        disabled={saving}
                       />
                       <textarea
                         value={tempModuleData.description}
@@ -307,10 +392,11 @@ const saveModule = async (moduleId) => {
                         className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm"
                         placeholder="Mô tả chương (tùy chọn)"
                         rows={2}
+                        disabled={saving}
                       />
                       <div className="flex gap-2 justify-end">
-                        <button onClick={() => saveModule(module.id)} className="px-4 py-2 bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-2">
-                          <CheckIcon className="w-4 h-4" /> Lưu
+                        <button onClick={() => saveModule(module.id)} disabled={saving} className="px-4 py-2 bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:opacity-50">
+                          <CheckIcon className="w-4 h-4" /> {saving ? 'Đang lưu...' : 'Lưu'}
                         </button>
                         <button onClick={cancelEditModule} className="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-700 flex items-center gap-2">
                           <XMarkIcon className="w-4 h-4" /> Hủy
@@ -331,7 +417,7 @@ const saveModule = async (moduleId) => {
                         <button onClick={() => startEditModule(module)} className="p-2 text-blue-400 hover:text-blue-300">
                           <PencilIcon className="w-5 h-5" />
                         </button>
-                        <button onClick={() => handleDeleteModule(module.id)} className="p-2 text-red-400 hover:text-red-300">
+                        <button onClick={() => handleDeleteModule(module.id)} disabled={saving} className="p-2 text-red-400 hover:text-red-300">
                           <TrashIcon className="w-5 h-5" />
                         </button>
                       </div>
@@ -339,7 +425,6 @@ const saveModule = async (moduleId) => {
                   )}
                 </div>
 
-                {/* Lessons List */}
                 <div className="p-5">
                   <div className="space-y-3">
                     {module.lessons?.map((lesson, lessonIdx) => (
@@ -352,6 +437,7 @@ const saveModule = async (moduleId) => {
                               onChange={(e) => setTempLessonData({ ...tempLessonData, title: e.target.value })}
                               className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white font-medium"
                               placeholder="Tên bài học"
+                              disabled={saving}
                             />
                             <textarea
                               value={tempLessonData.description}
@@ -359,12 +445,14 @@ const saveModule = async (moduleId) => {
                               className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm"
                               placeholder="Mô tả bài học"
                               rows={2}
+                              disabled={saving}
                             />
                             <div className="grid grid-cols-2 gap-3">
                               <select
                                 value={tempLessonData.type}
                                 onChange={(e) => setTempLessonData({ ...tempLessonData, type: e.target.value })}
                                 className="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                                disabled={saving}
                               >
                                 {lessonTypes.map(type => (
                                   <option key={type.value} value={type.value}>{type.label}</option>
@@ -376,6 +464,7 @@ const saveModule = async (moduleId) => {
                                 onChange={(e) => setTempLessonData({ ...tempLessonData, duration: parseInt(e.target.value) || 0 })}
                                 className="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
                                 placeholder="Thời lượng (phút)"
+                                disabled={saving}
                               />
                             </div>
                             <input
@@ -383,7 +472,8 @@ const saveModule = async (moduleId) => {
                               value={tempLessonData.content}
                               onChange={(e) => setTempLessonData({ ...tempLessonData, content: e.target.value })}
                               className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
-                              placeholder={tempLessonData.type === 'VIDEO' ? 'URL video (YouTube)' : 'Nội dung bài học'}
+                              placeholder={tempLessonData.type === 'VIDEO' ? 'URL video' : 'Nội dung bài học'}
+                              disabled={saving}
                             />
                             <label className="flex items-center gap-2">
                               <input
@@ -391,12 +481,13 @@ const saveModule = async (moduleId) => {
                                 checked={tempLessonData.isFree}
                                 onChange={(e) => setTempLessonData({ ...tempLessonData, isFree: e.target.checked })}
                                 className="w-4 h-4"
+                                disabled={saving}
                               />
                               <span className="text-gray-300 text-sm">Bài học miễn phí</span>
                             </label>
                             <div className="flex gap-2 justify-end mt-3">
-                              <button onClick={() => saveLesson(lesson.id)} className="px-4 py-2 bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-2">
-                                <CheckIcon className="w-4 h-4" /> Lưu
+                              <button onClick={() => saveLesson(lesson.id)} disabled={saving} className="px-4 py-2 bg-green-600 rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:opacity-50">
+                                <CheckIcon className="w-4 h-4" /> {saving ? 'Đang lưu...' : 'Lưu'}
                               </button>
                               <button onClick={cancelEditLesson} className="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-700 flex items-center gap-2">
                                 <XMarkIcon className="w-4 h-4" /> Hủy
@@ -431,7 +522,7 @@ const saveModule = async (moduleId) => {
                               <button onClick={() => startEditLesson(lesson)} className="p-1.5 text-blue-400 hover:text-blue-300">
                                 <PencilIcon className="w-4 h-4" />
                               </button>
-                              <button onClick={() => handleDeleteLesson(lesson.id)} className="p-1.5 text-red-400 hover:text-red-300">
+                              <button onClick={() => handleDeleteLesson(lesson.id)} disabled={saving} className="p-1.5 text-red-400 hover:text-red-300">
                                 <TrashIcon className="w-4 h-4" />
                               </button>
                             </div>
@@ -440,7 +531,6 @@ const saveModule = async (moduleId) => {
                       </div>
                     ))}
 
-                    {/* Add Lesson Button */}
                     {addingLesson === module.id ? (
                       <div className="bg-white/5 rounded-xl p-4 mt-2">
                         <div className="space-y-3">
@@ -449,14 +539,24 @@ const saveModule = async (moduleId) => {
                             value={newLessonData.title}
                             onChange={(e) => setNewLessonData({ ...newLessonData, title: e.target.value })}
                             className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
-                            placeholder="Tên bài học"
+                            placeholder="Tên bài học (tối thiểu 3 ký tự)"
                             autoFocus
+                            disabled={saving}
+                          />
+                          <textarea
+                            value={newLessonData.description}
+                            onChange={(e) => setNewLessonData({ ...newLessonData, description: e.target.value })}
+                            className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm"
+                            placeholder="Mô tả bài học (tùy chọn)"
+                            rows={2}
+                            disabled={saving}
                           />
                           <div className="grid grid-cols-2 gap-3">
                             <select
                               value={newLessonData.type}
                               onChange={(e) => setNewLessonData({ ...newLessonData, type: e.target.value })}
                               className="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                              disabled={saving}
                             >
                               {lessonTypes.map(type => (
                                 <option key={type.value} value={type.value}>{type.label}</option>
@@ -468,6 +568,7 @@ const saveModule = async (moduleId) => {
                               onChange={(e) => setNewLessonData({ ...newLessonData, duration: parseInt(e.target.value) || 0 })}
                               className="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
                               placeholder="Thời lượng (phút)"
+                              disabled={saving}
                             />
                           </div>
                           <input
@@ -475,7 +576,8 @@ const saveModule = async (moduleId) => {
                             value={newLessonData.content}
                             onChange={(e) => setNewLessonData({ ...newLessonData, content: e.target.value })}
                             className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
-                            placeholder={newLessonData.type === 'VIDEO' ? 'URL video (YouTube)' : 'Nội dung bài học'}
+                            placeholder={newLessonData.type === 'VIDEO' ? 'URL video (http://...)' : 'Nội dung bài học'}
+                            disabled={saving}
                           />
                           <label className="flex items-center gap-2">
                             <input
@@ -483,12 +585,13 @@ const saveModule = async (moduleId) => {
                               checked={newLessonData.isFree}
                               onChange={(e) => setNewLessonData({ ...newLessonData, isFree: e.target.checked })}
                               className="w-4 h-4"
+                              disabled={saving}
                             />
                             <span className="text-gray-300 text-sm">Bài học miễn phí</span>
                           </label>
                           <div className="flex gap-2 justify-end">
-                            <button onClick={() => handleAddLesson(module.id)} className="px-4 py-2 bg-green-600 rounded-lg hover:bg-green-700">
-                              Thêm
+                            <button onClick={() => handleAddLesson(module.id)} disabled={saving} className="px-4 py-2 bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50">
+                              {saving ? 'Đang thêm...' : 'Thêm'}
                             </button>
                             <button onClick={() => setAddingLesson(null)} className="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-700">
                               Hủy

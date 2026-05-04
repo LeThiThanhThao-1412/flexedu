@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
 export default function Navbar() {
-  const { user, logout, isAuthenticated, isAdmin, isInstructor } = useAuth();
+  const { user, logout, isAuthenticated, isAdmin, isInstructor, isStudent } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [scrolled, setScrolled] = useState(false);
@@ -22,7 +22,6 @@ export default function Navbar() {
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     
-    // Cleanup
     return () => window.removeEventListener('scroll', handleScroll);
   }, [scrolled]);
 
@@ -33,18 +32,24 @@ export default function Navbar() {
     setMobileMenuOpen(false);
   };
 
+  // Xây dựng navLinks dựa trên role
   const navLinks = [
     { path: '/', label: 'Trang chủ' },
     { path: '/courses', label: 'Khóa học' },
   ];
 
-  if (isAuthenticated) {
+  // Chỉ STUDENT mới thấy "Học tập"
+  if (isAuthenticated && isStudent) {
     navLinks.push({ path: '/my-learning', label: 'Học tập' });
   }
-  if (isInstructor) {
+
+  // INSTRUCTOR và ADMIN thấy "Giảng dạy"
+  if (isAuthenticated && (isInstructor || isAdmin)) {
     navLinks.push({ path: '/instructor/courses', label: 'Giảng dạy' });
   }
-  if (isAdmin) {
+
+  // Chỉ ADMIN thấy "Quản trị"
+  if (isAuthenticated && isAdmin) {
     navLinks.push({ path: '/admin', label: 'Quản trị' });
   }
 

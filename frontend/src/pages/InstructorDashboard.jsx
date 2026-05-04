@@ -35,20 +35,48 @@ export default function InstructorDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
+      // Lấy danh sách khóa học
       const response = await courseService.getMyCourses({ status: 'ALL' });
       console.log('My courses response:', response);
       
       const coursesData = response.data.courses || [];
       setCourses(coursesData);
 
-      const totalStudents = coursesData.reduce((sum, c) => sum + (c._count?.enrollments || 0), 0);
-      const totalRevenue = coursesData.reduce((sum, c) => sum + (c.price * (c._count?.enrollments || 0)), 0);
+      // Tính tổng số học viên và doanh thu
+      let totalStudents = 0;
+      let totalRevenue = 0;
+      let totalProgress = 0;
+      let totalEnrollments = 0;
+
+      for (const course of coursesData) {
+        const studentCount = course._count?.enrollments || 0;
+        totalStudents += studentCount;
+        totalRevenue += course.price * studentCount;
+        
+        // Lấy chi tiết từng khóa học để có progress của học viên
+        if (studentCount > 0) {
+          try {
+            const courseDetail = await courseService.getCourseById(course.id);
+            if (courseDetail.success && courseDetail.data && courseDetail.data.enrollments) {
+              courseDetail.data.enrollments.forEach(en => {
+                totalProgress += en.progress || 0;
+                totalEnrollments++;
+              });
+            }
+          } catch (err) {
+            console.error(`Failed to get course detail for ${course.id}:`, err);
+          }
+        }
+      }
+      
+      // Tính tỷ lệ hoàn thành trung bình
+      const completionRate = totalEnrollments > 0 ? Math.round(totalProgress / totalEnrollments) : 0;
       
       setStats({
         totalCourses: coursesData.length,
         totalStudents,
         totalRevenue,
-        completionRate: 0,
+        completionRate,
       });
     } catch (error) {
       console.error('Failed to fetch courses:', error);
@@ -153,10 +181,6 @@ export default function InstructorDashboard() {
                         <span className="flex items-center">
                           <UserGroupIcon className="w-3 h-3 mr-1" />
                           {course._count?.enrollments || 0} học viên
-                        </span>
-                        <span className="flex items-center">
-                          <EyeIcon className="w-3 h-3 mr-1" />
-                          {course.views || 0} lượt xem
                         </span>
                         <span className={`px-2 py-0.5 rounded-full text-xs ${
                           course.status === 'PUBLISHED' 

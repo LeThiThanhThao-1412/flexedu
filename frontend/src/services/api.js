@@ -9,22 +9,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
-// frontend/src/services/api.js
-api.interceptors.request.use(
-  (config) => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      if (user && user.id) {
-        config.headers['x-user-id'] = user.id;
-        console.log("🚀 Axios đang gửi ID:", user.id); // Thêm dòng này để debug
-      }
-    } else {
-      console.warn("⚠️ Không tìm thấy user trong localStorage!");
-    }
-    return config;
-  }
-);
+
 // Request interceptor - thêm token và user headers
 api.interceptors.request.use(
   (config) => {
@@ -41,6 +26,7 @@ api.interceptors.request.use(
         const user = JSON.parse(userStr);
         if (user.id) {
           config.headers['x-user-id'] = user.id;
+          console.log("🚀 Axios đang gửi ID:", user.id);
         }
         if (user.role) {
           config.headers['x-user-role'] = user.role;
@@ -48,6 +34,8 @@ api.interceptors.request.use(
       } catch (e) {
         console.error('Parse user error:', e);
       }
+    } else {
+      console.warn("⚠️ Không tìm thấy user trong localStorage!");
     }
     
     console.log('📤 Request:', {

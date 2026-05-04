@@ -6,7 +6,6 @@ import { courseService } from '../services/course.service';
 import toast from 'react-hot-toast';
 import { 
   ArrowLeftIcon, 
-  PlusIcon, 
   TrashIcon, 
   VideoCameraIcon, 
   DocumentTextIcon, 
@@ -36,6 +35,7 @@ export default function EditCoursePage() {
   const [newModuleTitle, setNewModuleTitle] = useState('');
   const [addingLesson, setAddingLesson] = useState(null);
   const [newLessonTitle, setNewLessonTitle] = useState('');
+  const [newLessonContent, setNewLessonContent] = useState('');
 
   useEffect(() => {
     fetchCourse();
@@ -77,6 +77,7 @@ export default function EditCoursePage() {
         setModules([]);
       }
     } catch (error) {
+      console.error('Fetch course error:', error);
       toast.error('Không thể tải thông tin khóa học');
       navigate('/instructor/courses');
     } finally {
@@ -89,142 +90,266 @@ export default function EditCoursePage() {
     setCourseData({ ...courseData, [name]: value });
   };
 
-  // Module functions
+  // ========== MODULE FUNCTIONS ==========
   const handleAddModule = async () => {
     if (!newModuleTitle.trim()) {
       toast.error('Vui lòng nhập tên chương');
       return;
     }
+    if (newModuleTitle.trim().length < 3) {
+      toast.error('Tên chương phải có ít nhất 3 ký tự');
+      return;
+    }
+    
+    setSaving(true);
     try {
-      await courseService.addModule(id, { title: newModuleTitle.trim(), description: '', order: modules.length });
-      toast.success('Thêm chương thành công');
-      setNewModuleTitle('');
-      setAddingModule(false);
-      fetchCourse();
+      const response = await courseService.addModule(id, { 
+        title: newModuleTitle.trim(), 
+        description: '', 
+        order: modules.length 
+      });
+      
+      if (response.success) {
+        toast.success('Thêm chương thành công');
+        setNewModuleTitle('');
+        setAddingModule(false);
+        await fetchCourse();
+      } else {
+        throw new Error(response.message || 'Thêm chương thất bại');
+      }
     } catch (error) {
-      toast.error('Thêm chương thất bại');
+      console.error('Add module error:', error);
+      toast.error(error.response?.data?.message || 'Thêm chương thất bại');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleUpdateModule = async (moduleId, newTitle) => {
-    if (!newTitle?.trim()) return;
+    if (!newTitle?.trim()) {
+      toast.error('Tên chương không được để trống');
+      return;
+    }
+    if (newTitle.trim().length < 3) {
+      toast.error('Tên chương phải có ít nhất 3 ký tự');
+      return;
+    }
+    
+    setSaving(true);
     try {
-      await courseService.updateModule(moduleId, { title: newTitle.trim() });
-      toast.success('Cập nhật chương thành công');
-      setEditingModule(null);
-      fetchCourse();
+      const response = await courseService.updateModule(moduleId, { 
+        title: newTitle.trim(),
+        description: '' 
+      });
+      
+      if (response.success) {
+        toast.success('Cập nhật chương thành công');
+        setEditingModule(null);
+        await fetchCourse();
+      } else {
+        throw new Error(response.message || 'Cập nhật thất bại');
+      }
     } catch (error) {
-      toast.error('Cập nhật thất bại');
+      console.error('Update module error:', error);
+      toast.error(error.response?.data?.message || 'Cập nhật thất bại');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDeleteModule = async (moduleId) => {
     if (!confirm('Bạn có chắc muốn xóa chương này? Tất cả bài học sẽ bị xóa!')) return;
+    
+    setSaving(true);
     try {
-      await courseService.deleteModule(moduleId);
-      toast.success('Xóa chương thành công');
-      fetchCourse();
+      const response = await courseService.deleteModule(moduleId);
+      if (response.success) {
+        toast.success('Xóa chương thành công');
+        await fetchCourse();
+      } else {
+        throw new Error(response.message || 'Xóa chương thất bại');
+      }
     } catch (error) {
-      toast.error('Xóa chương thất bại');
+      console.error('Delete module error:', error);
+      toast.error(error.response?.data?.message || 'Xóa chương thất bại');
+    } finally {
+      setSaving(false);
     }
   };
 
-  // Lesson functions
+  // ========== LESSON FUNCTIONS ==========
   const handleAddLesson = async (moduleId) => {
-    if (!newLessonTitle.trim()) return;
+    if (!newLessonTitle.trim()) {
+      toast.error('Vui lòng nhập tên bài học');
+      return;
+    }
+    if (newLessonTitle.trim().length < 3) {
+      toast.error('Tên bài học phải có ít nhất 3 ký tự');
+      return;
+    }
+    if (!newLessonContent.trim()) {
+      toast.error('Vui lòng nhập nội dung bài học (URL video)');
+      return;
+    }
+    
+    // Validate URL
+    const url = newLessonContent.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      toast.error('URL video phải bắt đầu bằng http:// hoặc https://');
+      return;
+    }
+    
     const module = modules.find(m => m.id === moduleId);
+    // Tính order mới
+    let maxOrder = 0;
+    if (module?.lessons && module.lessons.length > 0) {
+      const orders = module.lessons.map(l => l.order || 0);
+      maxOrder = Math.max(...orders) + 1;
+    }
+    
+    setSaving(true);
     try {
-      await courseService.addLesson(moduleId, {
+      const response = await courseService.addLesson(moduleId, {
         title: newLessonTitle.trim(),
         description: '',
         type: 'VIDEO',
-        content: '',
+        content: url,
         duration: 0,
-        order: module?.lessons?.length || 0,
+        order: maxOrder,
         isFree: false
       });
-      toast.success('Thêm bài học thành công');
-      setNewLessonTitle('');
-      setAddingLesson(null);
-      fetchCourse();
+      
+      if (response.success) {
+        toast.success('Thêm bài học thành công');
+        setNewLessonTitle('');
+        setNewLessonContent('');
+        setAddingLesson(null);
+        await fetchCourse();
+      } else {
+        throw new Error(response.message || 'Thêm bài học thất bại');
+      }
     } catch (error) {
-      toast.error('Thêm bài học thất bại');
+      console.error('Add lesson error:', error);
+      toast.error(error.response?.data?.message || 'Thêm bài học thất bại');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleUpdateLesson = async (lessonId, newTitle) => {
-    if (!newTitle?.trim()) return;
+  // QUAN TRỌNG: Sửa hàm update lesson - KHÔNG gửi order, gửi đủ content
+  const handleUpdateLesson = async (lessonId) => {
+    // Lấy lesson hiện tại
+    let currentLesson = null;
+    for (const module of modules) {
+      const found = module.lessons?.find(l => l.id === lessonId);
+      if (found) {
+        currentLesson = found;
+        break;
+      }
+    }
+    
+    if (!currentLesson) {
+      toast.error('Không tìm thấy bài học');
+      return;
+    }
+    
+    setSaving(true);
     try {
-      await courseService.updateLesson(lessonId, { title: newTitle.trim() });
-      toast.success('Cập nhật bài học thành công');
-      setEditingLesson(null);
-      fetchCourse();
+      // Gửi đầy đủ dữ liệu hiện tại của lesson, KHÔNG gửi order
+      const response = await courseService.updateLesson(lessonId, {
+        title: currentLesson.title,
+        description: currentLesson.description || '',
+        type: currentLesson.type || 'VIDEO',
+        content: currentLesson.content || 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        duration: currentLesson.duration || 0,
+        isFree: currentLesson.isFree || false
+      });
+      
+      if (response.success) {
+        toast.success('Cập nhật bài học thành công');
+        setEditingLesson(null);
+        await fetchCourse();
+      } else {
+        throw new Error(response.message || 'Cập nhật thất bại');
+      }
     } catch (error) {
-      toast.error('Cập nhật thất bại');
+      console.error('Update lesson error:', error);
+      toast.error(error.response?.data?.message || 'Cập nhật thất bại');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDeleteLesson = async (lessonId) => {
     if (!confirm('Bạn có chắc muốn xóa bài học này?')) return;
+    
+    setSaving(true);
     try {
-      await courseService.deleteLesson(lessonId);
-      toast.success('Xóa bài học thành công');
-      fetchCourse();
+      const response = await courseService.deleteLesson(lessonId);
+      if (response.success) {
+        toast.success('Xóa bài học thành công');
+        await fetchCourse();
+      } else {
+        throw new Error(response.message || 'Xóa bài học thất bại');
+      }
     } catch (error) {
-      toast.error('Xóa bài học thất bại');
+      console.error('Delete lesson error:', error);
+      toast.error(error.response?.data?.message || 'Xóa bài học thất bại');
+    } finally {
+      setSaving(false);
     }
   };
 
-  // frontend/src/pages/EditCoursePage.jsx
-// Sửa lại handleSubmit
-
-const handleSubmit = async () => {
-  // Validation
-  if (!courseData.title?.trim()) {
-    toast.error('Vui lòng nhập tên khóa học');
-    return;
-  }
-  if (courseData.title.trim().length < 5) {
-    toast.error('Tên khóa học phải có ít nhất 5 ký tự');
-    return;
-  }
-  if (!courseData.description?.trim()) {
-    toast.error('Vui lòng nhập mô tả khóa học');
-    return;
-  }
-  if (courseData.description.trim().length < 20) {
-    toast.error('Mô tả khóa học phải có ít nhất 20 ký tự');
-    return;
-  }
-  
-  const priceNum = Number(courseData.price);
-  if (isNaN(priceNum) || priceNum < 0 || priceNum > 9999) {
-    toast.error('Giá khóa học không hợp lệ (0-9999 USD)');
-    return;
-  }
-
-  setSaving(true);
-  try {
-    // 🔥 KHÔNG gửi thumbnail (backend không cho phép)
-    const updatePayload = {
-      title: courseData.title.trim(),
-      description: courseData.description.trim(),
-      price: priceNum,
-      level: courseData.level,
-    };
+  // ========== SUBMIT COURSE ==========
+  const handleSubmit = async () => {
+    if (!courseData.title?.trim()) {
+      toast.error('Vui lòng nhập tên khóa học');
+      return;
+    }
+    if (courseData.title.trim().length < 5) {
+      toast.error('Tên khóa học phải có ít nhất 5 ký tự');
+      return;
+    }
+    if (!courseData.description?.trim()) {
+      toast.error('Vui lòng nhập mô tả khóa học');
+      return;
+    }
+    if (courseData.description.trim().length < 20) {
+      toast.error('Mô tả khóa học phải có ít nhất 20 ký tự');
+      return;
+    }
     
-    console.log('📤 Sending update payload:', updatePayload);
-    
-    await courseService.updateCourse(id, updatePayload);
-    toast.success('Cập nhật thông tin khóa học thành công!');
-    navigate('/instructor/courses');
-  } catch (error) {
-    console.error('Update course error:', error);
-    toast.error(error.response?.data?.message || 'Cập nhật thất bại');
-  } finally {
-    setSaving(false);
-  }
-};
+    const priceNum = Number(courseData.price);
+    if (isNaN(priceNum) || priceNum < 0 || priceNum > 9999) {
+      toast.error('Giá khóa học không hợp lệ (0-9999 USD)');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const updatePayload = {
+        title: courseData.title.trim(),
+        description: courseData.description.trim(),
+        price: priceNum,
+        level: courseData.level,
+      };
+      
+      console.log('📤 Sending update payload:', updatePayload);
+      
+      const response = await courseService.updateCourse(id, updatePayload);
+      if (response.success) {
+        toast.success('Cập nhật thông tin khóa học thành công!');
+        navigate('/instructor/courses');
+      } else {
+        throw new Error(response.message || 'Cập nhật thất bại');
+      }
+    } catch (error) {
+      console.error('Update course error:', error);
+      toast.error(error.response?.data?.message || 'Cập nhật thất bại');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const levelOptions = [
     { value: 'BEGINNER', label: 'Cơ bản' },
@@ -297,7 +422,7 @@ const handleSubmit = async () => {
                 {courseData.thumbnail && <img src={courseData.thumbnail} alt="Preview" className="w-48 h-32 object-cover rounded-lg mt-3" />}
               </div>
               <div className="flex justify-end">
-                <button onClick={handleSubmit} disabled={saving} className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 flex items-center gap-2">
+                <button onClick={handleSubmit} disabled={saving} className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 flex items-center gap-2 disabled:opacity-50">
                   <CheckIcon className="w-5 h-5" /> {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
                 </button>
               </div>
@@ -312,9 +437,25 @@ const handleSubmit = async () => {
             <div className="flex justify-end">
               {addingModule ? (
                 <div className="flex gap-2">
-                  <input type="text" value={newModuleTitle} onChange={(e) => setNewModuleTitle(e.target.value)} placeholder="Tên chương" className="px-4 py-2 bg-white/10 rounded-lg text-white" autoFocus onKeyDown={(e) => { if (e.key === 'Enter') handleAddModule(); if (e.key === 'Escape') setAddingModule(false); }} />
-                  <button onClick={handleAddModule} className="p-2 text-green-400"><CheckIcon className="w-5 h-5" /></button>
-                  <button onClick={() => setAddingModule(false)} className="p-2 text-red-400"><XMarkIcon className="w-5 h-5" /></button>
+                  <input 
+                    type="text" 
+                    value={newModuleTitle} 
+                    onChange={(e) => setNewModuleTitle(e.target.value)} 
+                    placeholder="Tên chương (tối thiểu 3 ký tự)" 
+                    className="px-4 py-2 bg-white/10 rounded-lg text-white w-64" 
+                    autoFocus 
+                    disabled={saving}
+                    onKeyDown={(e) => { 
+                      if (e.key === 'Enter') handleAddModule(); 
+                      if (e.key === 'Escape') setAddingModule(false); 
+                    }} 
+                  />
+                  <button onClick={handleAddModule} disabled={saving} className="p-2 text-green-400 disabled:opacity-50">
+                    <CheckIcon className="w-5 h-5" />
+                  </button>
+                  <button onClick={() => setAddingModule(false)} className="p-2 text-red-400">
+                    <XMarkIcon className="w-5 h-5" />
+                  </button>
                 </div>
               ) : (
                 <button onClick={() => setAddingModule(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center gap-2">
@@ -335,17 +476,36 @@ const handleSubmit = async () => {
                     <div className="flex-1">
                       {editingModule === module.id ? (
                         <div className="flex items-center gap-2">
-                          <input type="text" defaultValue={module.title} onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateModule(module.id, e.target.value); if (e.key === 'Escape') setEditingModule(null); }} className="px-3 py-1 bg-white/10 rounded-lg text-white text-lg font-semibold" autoFocus />
-                          <button onClick={(e) => handleUpdateModule(module.id, e.target.previousSibling?.value)} className="p-1 text-green-400"><CheckIcon className="w-5 h-5" /></button>
-                          <button onClick={() => setEditingModule(null)} className="p-1 text-red-400"><XMarkIcon className="w-5 h-5" /></button>
+                          <input 
+                            type="text" 
+                            defaultValue={module.title} 
+                            onBlur={(e) => handleUpdateModule(module.id, e.target.value)}
+                            onKeyDown={(e) => { 
+                              if (e.key === 'Enter') handleUpdateModule(module.id, e.target.value); 
+                              if (e.key === 'Escape') setEditingModule(null); 
+                            }} 
+                            className="px-3 py-1 bg-white/10 rounded-lg text-white text-lg font-semibold" 
+                            autoFocus 
+                            disabled={saving}
+                          />
+                          <button onClick={(e) => handleUpdateModule(module.id, e.target.previousSibling?.value)} disabled={saving} className="p-1 text-green-400">
+                            <CheckIcon className="w-5 h-5" />
+                          </button>
+                          <button onClick={() => setEditingModule(null)} className="p-1 text-red-400">
+                            <XMarkIcon className="w-5 h-5" />
+                          </button>
                         </div>
                       ) : (
                         <h2 className="text-xl font-semibold text-white">Chương {idx + 1}: {module.title}</h2>
                       )}
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => setEditingModule(module.id)} className="p-1 text-gray-400 hover:text-white"><PencilIcon className="w-4 h-4" /></button>
-                      <button onClick={() => handleDeleteModule(module.id)} className="p-1 text-red-400 hover:text-red-300"><TrashIcon className="w-4 h-4" /></button>
+                      <button onClick={() => setEditingModule(module.id)} className="p-1 text-gray-400 hover:text-white">
+                        <PencilIcon className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDeleteModule(module.id)} disabled={saving} className="p-1 text-red-400 hover:text-red-300">
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
 
@@ -355,9 +515,31 @@ const handleSubmit = async () => {
                         <div className="flex items-center gap-3 flex-1">
                           {editingLesson === lesson.id ? (
                             <div className="flex items-center gap-2 flex-1">
-                              <input type="text" defaultValue={lesson.title} onKeyDown={(e) => { if (e.key === 'Enter') handleUpdateLesson(lesson.id, e.target.value); if (e.key === 'Escape') setEditingLesson(null); }} className="px-3 py-1 bg-white/10 rounded-lg text-white flex-1" autoFocus />
-                              <button onClick={(e) => handleUpdateLesson(lesson.id, e.target.previousSibling?.value)} className="p-1 text-green-400"><CheckIcon className="w-5 h-5" /></button>
-                              <button onClick={() => setEditingLesson(null)} className="p-1 text-red-400"><XMarkIcon className="w-5 h-5" /></button>
+                              <input 
+                                type="text" 
+                                defaultValue={lesson.title} 
+                                onBlur={(e) => {
+                                  // Cập nhật title tạm thời trong state
+                                  const updatedLessons = [...modules];
+                                  for (const m of updatedLessons) {
+                                    const l = m.lessons?.find(l => l.id === lesson.id);
+                                    if (l) {
+                                      l.title = e.target.value;
+                                      break;
+                                    }
+                                  }
+                                  setModules(updatedLessons);
+                                }}
+                                className="px-3 py-1 bg-white/10 rounded-lg text-white flex-1" 
+                                autoFocus 
+                                disabled={saving}
+                              />
+                              <button onClick={() => handleUpdateLesson(lesson.id)} disabled={saving} className="p-1 text-green-400">
+                                <CheckIcon className="w-5 h-5" />
+                              </button>
+                              <button onClick={() => setEditingLesson(null)} className="p-1 text-red-400">
+                                <XMarkIcon className="w-5 h-5" />
+                              </button>
                             </div>
                           ) : (
                             <>
@@ -367,17 +549,44 @@ const handleSubmit = async () => {
                           )}
                         </div>
                         <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition">
-                          <button onClick={() => setEditingLesson(lesson.id)} className="p-1 text-gray-400 hover:text-white"><PencilIcon className="w-4 h-4" /></button>
-                          <button onClick={() => handleDeleteLesson(lesson.id)} className="p-1 text-red-400 hover:text-red-300"><TrashIcon className="w-4 h-4" /></button>
+                          <button onClick={() => setEditingLesson(lesson.id)} className="p-1 text-gray-400 hover:text-white">
+                            <PencilIcon className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleDeleteLesson(lesson.id)} disabled={saving} className="p-1 text-red-400 hover:text-red-300">
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                     ))}
                     
                     {addingLesson === module.id ? (
-                      <div className="flex gap-2 mt-2">
-                        <input type="text" value={newLessonTitle} onChange={(e) => setNewLessonTitle(e.target.value)} placeholder="Tên bài học" className="px-3 py-1 bg-white/10 rounded-lg text-white flex-1" autoFocus onKeyDown={(e) => { if (e.key === 'Enter') handleAddLesson(module.id); if (e.key === 'Escape') setAddingLesson(null); }} />
-                        <button onClick={() => handleAddLesson(module.id)} className="p-1 text-green-400"><CheckIcon className="w-4 h-4" /></button>
-                        <button onClick={() => setAddingLesson(null)} className="p-1 text-red-400"><XMarkIcon className="w-4 h-4" /></button>
+                      <div className="flex flex-col gap-2 mt-2">
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" 
+                            value={newLessonTitle} 
+                            onChange={(e) => setNewLessonTitle(e.target.value)} 
+                            placeholder="Tên bài học (tối thiểu 3 ký tự)" 
+                            className="px-3 py-1 bg-white/10 rounded-lg text-white flex-1" 
+                            autoFocus 
+                            disabled={saving}
+                          />
+                          <input 
+                            type="text" 
+                            value={newLessonContent} 
+                            onChange={(e) => setNewLessonContent(e.target.value)} 
+                            placeholder="URL video (VD: https://youtu.be/...)" 
+                            className="px-3 py-1 bg-white/10 rounded-lg text-white flex-1" 
+                            disabled={saving}
+                          />
+                          <button onClick={() => handleAddLesson(module.id)} disabled={saving} className="p-1 text-green-400">
+                            <CheckIcon className="w-5 h-5" />
+                          </button>
+                          <button onClick={() => setAddingLesson(null)} className="p-1 text-red-400">
+                            <XMarkIcon className="w-5 h-5" />
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500">⚠️ Bắt buộc nhập URL video hợp lệ (bắt đầu bằng http:// hoặc https://)</p>
                       </div>
                     ) : (
                       <button onClick={() => setAddingLesson(module.id)} className="mt-2 text-sm text-blue-400 hover:text-blue-300 flex items-center gap-1">
@@ -390,7 +599,7 @@ const handleSubmit = async () => {
             )}
 
             <div className="flex justify-end pt-4">
-              <button onClick={handleSubmit} disabled={saving} className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl flex items-center gap-2">
+              <button onClick={handleSubmit} disabled={saving} className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl flex items-center gap-2 disabled:opacity-50">
                 <CheckIcon className="w-5 h-5" /> {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
               </button>
             </div>

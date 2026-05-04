@@ -51,7 +51,7 @@ export default function LearningPage() {
 
   useEffect(() => {
     fetchCourse();
-    loadProgressFromLocal();
+    fetchProgressFromAPI();
   }, [courseId]);
 
   const fetchCourse = async () => {
@@ -73,11 +73,28 @@ export default function LearningPage() {
     }
   };
 
+  const fetchProgressFromAPI = async () => {
+    try {
+      const response = await courseService.getProgress(courseId);
+      console.log('📥 Progress from API:', response);
+      
+      if (response.success && response.data) {
+        const apiProgress = response.data.progress || 0;
+        setProgress(apiProgress);
+      }
+    } catch (error) {
+      console.error('Failed to fetch progress from API:', error);
+      loadProgressFromLocal();
+    }
+  };
+
   const loadProgressFromLocal = () => {
     const savedCompleted = localStorage.getItem(`completed_lessons_${courseId}`);
     if (savedCompleted) {
       const completed = JSON.parse(savedCompleted);
       setCompletedLessons(completed);
+      const newProgress = calculateProgress(completed);
+      setProgress(newProgress);
     }
   };
 
@@ -114,18 +131,35 @@ export default function LearningPage() {
       setCompletedLessons(newCompletedLessons);
       saveProgress(newCompletedLessons);
       
-      try {
-        await courseService.updateProgress({
-          lessonId: currentLesson.id,
-          completed: true,
-          totalLessons: getAllLessonIds().length,
-          lessonIds: getAllLessonIds()
-        });
-      } catch (apiError) {
-        console.log('API update failed but local saved');
-      }
+      const allLessonIds = getAllLessonIds();
+      const totalLessons = allLessonIds.length;
+      const completedCount = newCompletedLessons.length;
+      const newProgress = (completedCount / totalLessons) * 100;
       
-      toast.success('🎉 Hoàn thành bài học! Tiếp tục nào!');
+      console.log('📤 Updating progress:', {
+        lessonId: currentLesson.id,
+        completed: true,
+        totalLessons: totalLessons,
+        lessonIds: allLessonIds,
+        courseId: courseId,
+        expectedProgress: newProgress
+      });
+      
+      // Gọi API update progress với courseId
+      const updateResponse = await courseService.updateProgress({
+        lessonId: currentLesson.id,
+        completed: true,
+        totalLessons: totalLessons,
+        lessonIds: allLessonIds,
+        courseId: courseId
+      });
+      
+      console.log('✅ Update response:', updateResponse);
+      
+      // Fetch lại progress từ API để đảm bảo đồng bộ
+      await fetchProgressFromAPI();
+      
+      toast.success(`🎉 Hoàn thành bài học! Tiến độ: ${Math.round(newProgress)}%`);
       
       setTimeout(() => {
         handleNextLesson();
@@ -133,6 +167,10 @@ export default function LearningPage() {
     } catch (error) {
       console.error('Failed to mark lesson complete:', error);
       toast.error('Không thể cập nhật tiến độ, vui lòng thử lại');
+      // Rollback nếu API lỗi
+      const rolledBackLessons = completedLessons.filter(id => id !== currentLesson.id);
+      setCompletedLessons(rolledBackLessons);
+      saveProgress(rolledBackLessons);
     } finally {
       setUpdatingProgress(false);
     }
@@ -240,7 +278,7 @@ export default function LearningPage() {
                 style={{ width: `${currentProgress}%` }}
               />
             </div>
-            <span className="text-sm text-gray-300">{currentProgress}% hoàn thành</span>
+            <span className="text-sm text-gray-300">{Math.round(currentProgress)}% hoàn thành</span>
           </div>
         </div>
 
@@ -358,7 +396,7 @@ export default function LearningPage() {
               </div>
               <div className="flex justify-between text-sm">
                 <p className="text-gray-400">{completedCount} / {allLessonsCount} bài học</p>
-                <p className="text-blue-400 font-medium">{currentProgress}% hoàn thành</p>
+                <p className="text-blue-400 font-medium">{Math.round(currentProgress)}% hoàn thành</p>
               </div>
               {currentProgress === 100 && (
                 <div className="mt-3 p-2 bg-green-600/20 rounded-lg text-center">
@@ -400,7 +438,7 @@ export default function LearningPage() {
                                 Bài {lessonIdx + 1}: {lesson.title}
                               </span>
                             </div>
-                            {lesson.duration && (
+                            {lesson.duration > 0 && (
                               <span className="text-xs text-gray-500">{lesson.duration} phút</span>
                             )}
                           </button>

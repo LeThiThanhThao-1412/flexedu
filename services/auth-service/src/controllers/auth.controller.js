@@ -1,5 +1,6 @@
 // services/auth-service/src/controllers/auth.controller.js
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 const JWTService = require('../services/jwt.service');
 const redisClient = require('../config/redis');
@@ -28,6 +29,7 @@ class AuthController {
       const hashedPassword = await bcrypt.hash(password, 10);
       const userRole = role === 'INSTRUCTOR' ? 'INSTRUCTOR' : 'STUDENT';
       const isActive = userRole === 'STUDENT'; // Student mặc định true
+      
       // Tạo user
       const user = await prisma.user.create({
         data: {
@@ -35,7 +37,7 @@ class AuthController {
           password: hashedPassword,
           name,
           role: userRole,
-          isActive: isActive // Gán trạng thái vào đây
+          isActive: isActive
         },
         select: {
           id: true,
@@ -46,7 +48,8 @@ class AuthController {
           createdAt: true
         }
       });
-      // 3. Nếu là Instructor, thông báo cần chờ duyệt
+      
+      // Nếu là Instructor, thông báo cần chờ duyệt
       if (!isActive) {
         return res.status(201).json({
           success: true,
@@ -54,6 +57,7 @@ class AuthController {
           data: { user }
         });
       }
+      
       // Tạo token
       const tokens = JWTService.generateTokens({
         userId: user.id,
@@ -257,6 +261,7 @@ class AuthController {
       });
     }
   }
+
   async approveInstructor(req, res) {
     try {
       const { instructorId } = req.params;
@@ -283,87 +288,203 @@ class AuthController {
       res.status(500).json({ success: false, message: error.message });
     }
   }
-  // services/auth-service/src/controllers/auth.controller.js
-// Thêm method này vào class AuthController
 
-// Lấy danh sách giảng viên chờ duyệt (isActive = false)
-async getPendingInstructors(req, res) {
-  try {
-    // Chỉ admin mới được xem
-    if (req.user?.role !== 'ADMIN') {
-      return res.status(403).json({
+  // Lấy danh sách giảng viên chờ duyệt (isActive = false)
+  async getPendingInstructors(req, res) {
+    try {
+      const pendingInstructors = await prisma.user.findMany({
+        where: {
+          role: 'INSTRUCTOR',
+          isActive: false
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
+
+      res.json({
+        success: true,
+        data: pendingInstructors
+      });
+    } catch (error) {
+      console.error('Get pending instructors error:', error);
+      res.status(500).json({
         success: false,
-        message: 'Access denied. Admin only.'
+        message: 'Internal server error'
       });
     }
-
-    const pendingInstructors = await prisma.user.findMany({
-      where: {
-        role: 'INSTRUCTOR',
-        isActive: false
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
-
-    res.json({
-      success: true,
-      data: pendingInstructors
-    });
-  } catch (error) {
-    console.error('Get pending instructors error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
   }
-}
-// services/auth-service/src/controllers/auth.controller.js
-// Thêm method này
 
-async getUserById(req, res) {
-  try {
-    const { userId } = req.params;
-    
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true
+  async getUserById(req, res) {
+    try {
+      const { userId } = req.params;
+      
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          isActive: true
+        }
+      });
+      
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
       }
-    });
-    
-    if (!user) {
-      return res.status(404).json({
+      
+      res.json({
+        success: true,
+        data: user
+      });
+    } catch (error) {
+      console.error('Get user error:', error);
+      res.status(500).json({
         success: false,
-        message: 'User not found'
+        message: 'Internal server error'
       });
     }
-    
-    res.json({
-      success: true,
-      data: user
-    });
-  } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
   }
-}
+
+  // ========== ADMIN USER MANAGEMENT ==========
+
+  // Lấy tất cả người dùng (cho admin)
+  async getAllUsers(req, res) {
+    try {
+      const { page = 1, limit = 20, role, search } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      const where = {};
+      
+      if (role && role !== 'ALL') where.role = role;
+      if (search) {
+        where.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } }
+        ];
+      }
+      
+      const [users, total] = await Promise.all([
+        prisma.user.findMany({
+          where,
+          skip,
+          take: parseInt(limit),
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            isActive: true,
+            createdAt: true,
+            updatedAt: true
+          }
+        }),
+        prisma.user.count({ where })
+      ]);
+      
+      res.json({
+        success: true,
+        data: {
+          users,
+          pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages: Math.ceil(total / parseInt(limit)) }
+        }
+      });
+    } catch (error) {
+      console.error('Get all users error:', error);
+      res.status(500).json({ success: false, message: 'Internal error' });
+    }
+  }
+
+  // Admin cập nhật role user
+  async adminUpdateUserRole(req, res) {
+    try {
+      const { userId } = req.params;
+      const { role } = req.body; // STUDENT, INSTRUCTOR, ADMIN
+      
+      if (!['STUDENT', 'INSTRUCTOR', 'ADMIN'].includes(role)) {
+        return res.status(400).json({ success: false, message: 'Invalid role' });
+      }
+      
+      const user = await prisma.user.update({
+        where: { id: userId },
+        data: { role },
+        select: { id: true, email: true, name: true, role: true, isActive: true }
+      });
+      
+      await redisClient.del(`user:${userId}`);
+      
+      res.json({ success: true, message: 'User role updated', data: user });
+    } catch (error) {
+      console.error('Admin update user role error:', error);
+      res.status(500).json({ success: false, message: 'Internal error' });
+    }
+  }
+
+  // Admin khóa/mở khóa user
+  async adminToggleUserStatus(req, res) {
+    try {
+      const { userId } = req.params;
+      
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+      
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: { isActive: !user.isActive },
+        select: { id: true, email: true, name: true, role: true, isActive: true }
+      });
+      
+      await redisClient.del(`user:${userId}`);
+      
+      res.json({
+        success: true,
+        message: `User ${updatedUser.isActive ? 'activated' : 'deactivated'}`,
+        data: updatedUser
+      });
+    } catch (error) {
+      console.error('Admin toggle user status error:', error);
+      res.status(500).json({ success: false, message: 'Internal error' });
+    }
+  }
+
+  // Admin xóa user
+  async adminDeleteUser(req, res) {
+    try {
+      const { userId } = req.params;
+      
+      // Kiểm tra không xóa admin cuối cùng
+      const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
+      const userToDelete = await prisma.user.findUnique({ where: { id: userId } });
+      
+      if (userToDelete?.role === 'ADMIN' && adminCount <= 1) {
+        return res.status(400).json({ success: false, message: 'Cannot delete the last admin' });
+      }
+      
+      await prisma.refreshToken.deleteMany({ where: { userId } });
+      await prisma.user.delete({ where: { id: userId } });
+      
+      await redisClient.del(`user:${userId}`);
+      
+      res.json({ success: true, message: 'User deleted successfully' });
+    } catch (error) {
+      console.error('Admin delete user error:', error);
+      res.status(500).json({ success: false, message: 'Internal error' });
+    }
+  }
 }
 
 module.exports = new AuthController();

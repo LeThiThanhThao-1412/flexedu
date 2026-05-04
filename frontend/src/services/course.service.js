@@ -2,7 +2,6 @@
 import api from './api';
 
 export const courseService = {
-  // Course
   getCourses: async (params = {}) => {
     const response = await api.get('/api/courses', { params });
     return response.data;
@@ -33,24 +32,21 @@ export const courseService = {
     return response.data;
   },
   
-  // Module
   addModule: async (courseId, data) => {
     const response = await api.post(`/api/courses/${courseId}/modules`, data);
     return response.data;
   },
   
   updateModule: async (moduleId, data) => {
-  console.log('📤 Updating module:', { moduleId, data });
-  const response = await api.put(`/api/modules/${moduleId}`, data);
-  return response.data;
-},
+    const response = await api.put(`/api/modules/${moduleId}`, data);
+    return response.data;
+  },
   
   deleteModule: async (moduleId) => {
     const response = await api.delete(`/api/modules/${moduleId}`);
     return response.data;
   },
   
-  // Lesson
   addLesson: async (moduleId, data) => {
     const response = await api.post(`/api/modules/${moduleId}/lessons`, data);
     return response.data;
@@ -66,7 +62,6 @@ export const courseService = {
     return response.data;
   },
   
-  // Enrollment
   enrollCourse: async (courseId) => {
     const response = await api.post(`/api/courses/${courseId}/enroll`);
     return response.data;
@@ -87,7 +82,6 @@ export const courseService = {
     return response.data;
   },
   
-  // Admin
   getPendingInstructors: async () => {
     const response = await api.get('/api/auth/pending-instructors');
     return response.data;
@@ -95,6 +89,22 @@ export const courseService = {
   
   approveInstructor: async (instructorId) => {
     const response = await api.patch(`/api/auth/approve/${instructorId}`);
+    return response.data;
+  },
+
+  // ========== ADMIN COURSE MANAGEMENT ==========
+  adminGetCourses: async (params = {}) => {
+    const response = await api.get('/api/admin/courses', { params });
+    return response.data;
+  },
+  
+  adminDeleteCourse: async (courseId) => {
+    const response = await api.delete(`/api/admin/courses/${courseId}`);
+    return response.data;
+  },
+  
+  adminUpdateCourseStatus: async (courseId, data) => {
+    const response = await api.patch(`/api/admin/courses/${courseId}/status`, data);
     return response.data;
   },
 };

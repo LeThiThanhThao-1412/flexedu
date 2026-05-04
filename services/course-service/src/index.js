@@ -1,4 +1,3 @@
-// services/course-service/src/index.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -17,6 +16,11 @@ app.use(express.json());
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
+
+// ========== ADMIN COURSE ROUTES (đặt trước để tránh conflict) ==========
+app.get('/api/admin/courses', authorize(['ADMIN']), courseController.adminGetAllCourses);
+app.delete('/api/admin/courses/:id', authorize(['ADMIN']), courseController.adminDeleteCourse);
+app.patch('/api/admin/courses/:id/status', authorize(['ADMIN']), courseController.adminUpdateCourseStatus);
 
 // ========== LESSON ROUTES ==========
 app.get('/api/lessons/:lessonId', courseController.getLessonById);
@@ -42,6 +46,7 @@ app.delete('/api/lessons/:lessonId', authorize(['INSTRUCTOR', 'ADMIN']), courseC
 // ========== ENROLLMENT ROUTES ==========
 app.post('/api/courses/:courseId/enroll', courseController.enrollCourse);
 app.post('/api/progress', validate(validators.updateProgressSchema), courseController.updateProgress);
+app.get('/api/enrollments/my-courses', courseController.getMyEnrollments);
 
 app.listen(PORT, () => {
   console.log(`✅ Course Service running on port ${PORT}`);
